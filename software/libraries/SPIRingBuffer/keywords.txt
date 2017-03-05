@@ -1,0 +1,9 @@
+SPIRingBuffer	KEYWORD1
+begin	KEYWORD2
+reset	KEYWORD2
+put	KEYWORD2
+get	KEYWORD2
+availableData	KEYWORD2
+availableSpace	KEYWORD2
+getHead	KEYWORD2
+getTail	KEYWORD2
