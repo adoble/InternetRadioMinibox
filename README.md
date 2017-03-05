@@ -10,5 +10,4 @@ This is a project to develop and internet radio that can be fitted into an old N
 
 
 ## Release History
-
-Tag 0.0.1 is the breadboard version. Uses VS1063 breakout board. Uses ATMEGA 328 as front panel controller (missing band switch). No SPI connection between front panel controller and main processor (ESP8266).
+**v0.01-breadboard** is a breadboard version (i.e. pre-release). Uses VS1053 breakout board. Uses ATMEGA 328 as front panel controller (missing band switch). No SPI connection between front panel controller and main processor (ESP8266).
