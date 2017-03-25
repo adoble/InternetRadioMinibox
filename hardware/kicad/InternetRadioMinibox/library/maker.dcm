@@ -15,6 +15,10 @@ $CMP FTDI_BASIC_BOARD
 D FDSI Breakout Board (USB TO RS232) Sparkfun
 $ENDCMP
 #
+$CMP SW_PUSH_SMALL
+F http://www.produktinfo.conrad.com/datenblaetter/700000-724999/701749-da-01-en-TASTSCHALTER_FSM2JH.pdf
+$ENDCMP
+#
 $CMP VS1053_BOARD
 D VS1053 MP3 Codec Board
 $ENDCMP
