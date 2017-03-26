@@ -19,6 +19,11 @@ $CMP SW_PUSH_SMALL
 F http://www.produktinfo.conrad.com/datenblaetter/700000-724999/701749-da-01-en-TASTSCHALTER_FSM2JH.pdf
 $ENDCMP
 #
+$CMP VS1011e
+D VS1011 MP3 Codec
+F http://www.vlsi.fi/fileadmin/datasheets/vs1011.pdf
+$ENDCMP
+#
 $CMP VS1053_BOARD
 D VS1053 MP3 Codec Board
 $ENDCMP
