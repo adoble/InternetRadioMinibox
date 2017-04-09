@@ -11,27 +11,12 @@
   *  INST_DEBUG                0x00     Used to debug
   *  INST_GET_STATION          0x01     Delivers one byte representing up 256 stations per band 
   *                                     (i.e. uses all 8 bits)
-  *  INST_GET_BAND             0x02     Delivers one byte with the band. Up to 8 bands are supported
-  *                                     (ie. the first 4 bits are used).
   *  INST_GET_VOL              0x03     Delivers one byte representing up to 256 levels of the
   *                                     set volume
-  *  INST_GET_TONE             0x04     Delivers one byte represening 256 tone levels. 0 is most bass,
-  *                                     255 is most treble
   *  INST_STATUS_OK            0x05     Used to indicate that the status is OK. No data is received or
   *                                     transmitted
   *  INST_STATUS_ERROR         0x06     Used to indicate an error status. One byte with the error code is
-  *                                     transmitted.
-  *     *** --- TO BE DONE --- ***
-  *  INST_COLOR_RED            0x07     Used to set the intensity of the red component of the front
-  *                                     panel lighting. Receives one byte with the intensity
-  *                                     (i.e. from 0 to 255).
-  *  INST_COLOR_GREEN          0x08     Used to set the intensity of the green component of the front
-  *                                     panel lighting. Receives one byte with the intensity
-  *                                     (i.e. from 0 to 255).
-  *  INST_COLOR_BLUE           0x09     Used to set the intensity of the blue component of the front
-  *                                     panel lighting. Receives one byte with the intensity
-  *                                     (i.e. from 0 to 255).
-
+  *                                     transmitted. Value is from 0 (=OK) to 8. 
  */
 
 #include <SPI.h>
@@ -40,21 +25,14 @@ volatile boolean processInstruction;
 volatile char instruction;
 
 
-
 // Instructions codes need to start at 0x00 and be contiguous
-const int NUMBER_INSTRUCTIONS = 10;
+const int NUMBER_INSTRUCTIONS = 5;   
 
 const byte INST_DEBUG = 0x00;
 const byte INST_GET_STATION = 0x01;
-const byte INST_GET_BAND = 0x02;
-const byte INST_GET_VOL = 0x03;
-const byte INST_GET_TONE = 0x04;
-const byte INST_STATUS_OK = 0x05;
-const byte INST_STATUS_ERROR = 0x06;
-const byte INST_COLOR_RED = 0x07;
-const byte INST_COLOR_GREEN = 0x08;
-const byte INST_COLOR_BLUE = 0x09;
-
+const byte INST_GET_VOL = 0x02;
+const byte INST_STATUS_OK = 0x03;
+const byte INST_STATUS_ERROR = 0x04;
 
 const byte READ = 0x00;
 const byte WRITE = 0x01;
@@ -65,14 +43,9 @@ const byte NO_TRANSFER = 0x03;
 // int nBytesPerInstruction[] = {
 //                               0, // INST_DEBUG = 0x00;   // Used fr debug instruction
 //                               1, // INST_GET_STATION = 0x01, i.e.up to 256 stations per band
-//                               1, // INST_GET_BAND = 0x02, i.e  up to 8 bands
-//                               2, // INST_GET_VOL = 0x03, up to 1024 volume levels
-//                               1, // INST_GET_TONE = 0x04, i.e. up to 256 tone levels
+//                               2, // INST_GET_VOL = 0x03, up to 32 volume levels
 //                               0, // INST_STATUS_OK = 0x05
-//                               1, // INST_STATUS_ERROR = 0x06
-//                               1, // INST_COLOR_RED = 0x07;
-//                               1, // INST_COLOR_GREEN = 0x08;
-//                               1  // INST_COLOR_BLUE = 0x09;
+//                               1  // INST_STATUS_ERROR = 0x06
 //                              };
 
 // Array to specify if the instruction is read, write or if no transfer of bytes takes place.
@@ -81,14 +54,9 @@ const byte NO_TRANSFER = 0x03;
 int instructionTypes[] = {
                               NO_TRANSFER , // INST_DEBUG = 0x00;
                               READ, // INST_GET_STATION = 0x01,
-                              READ, // INST_GET_BAND = 0x02
                               READ, // INST_GET_VOL = 0x03
-                              READ,  // INST_GET_TONE = 0x04
                               NO_TRANSFER, // INST_STATUS_OK = 0x05
-                              WRITE,   // INST_STATUS_ERROR = 0x06
-                              WRITE, // INST_COLOR_RED = 0x07;
-                              WRITE, // INST_COLOR_GREEN = 0x08;
-                              WRITE // INST_COLOR_BLUE = 0x09;
+                              WRITE    // INST_STATUS_ERROR = 0x06
                           };
 
 // The buffer containing the data to be transfered indexed by the instruction
@@ -107,47 +75,29 @@ byte volatile state = STATE_INITIAL;
 // Number of bytes to transfer
 int volatile nBytes = 0;
 
-// Indicator pins for test
-const int GREEN_PIN = 3;   // Needs to be a PWM pin
-const int RED_PIN = 5;     // Needs to be a PWM pin
-const int BLUE_PIN = 6;    // Needs to be a PWM pin
-const int VOLUME_ANALOG_PIN = 0; // Needs to be an analog pin
+// Pins 
+const int GREEN_PIN = 3;    // Green LED
+const int RED_PIN = 5;      // Red LED
+const int encoderPinA = 2;  // Interrupt 0 pin for rotary encoder (volume control) 
+const int encoderPinB = 4;  // Other pin for for rotary encoder (volume control) 
 
 const int STATION_TUNING_OUT_PIN = A5;
 const int STATION_TUNING_IN_PIN = A4;
 
-// Error code mapping to the red, green and blue LEDS (in that order. 
+// Error code mapping to the red, green LEDS in that order. 
 //    0  = off
 //    1  = on
 //    2 = blink
 int errorCodeMap[][3] = {
-                      {0,0,0},  // 0  =  No error
-                      {0,0,1},  // 1
-                      {0,0,2},  // 2
-                      {0,1,0},  // 3
-                      {0,1,1},  // 4
-                      {0,1,2},  // 5
-                      {0,2,0},  // 6
-                      {0,2,1},  // 7
-                      {0,2,2},  // 8
-                      {1,0,0},  // 9
-                      {1,0,1},  // 10
-                      {1,0,2},  // 11
-                      {1,1,0},  // 12
-                      {1,1,1},  // 13
-                      {1,1,2},  // 14
-                      {1,2,0},  // 15
-                      {1,2,1},  // 16
-                      {1,2,2},  // 17
-                      {2,0,0},  // 18
-                      {2,0,1},  // 19
-                      {2,0,2},  // 20
-                      {2,1,0},  // 21
-                      {2,1,1},  // 22
-                      {2,1,2},  // 23
-                      {2,2,0},  // 24
-                      {2,2,1},  // 25
-                      {2,2,2}   // 26
+                      {0,0},  // 0  =  No error
+                      {0,1},  // 1
+                      {0,2},  // 2
+                      {1,0},  // 3
+                      {1,1},  // 4
+                      {1,2},  // 5
+                      {2,0},  // 6
+                      {2,1},  // 7
+                      {2,2}   // 8
                   };
 
 // The error codes
@@ -159,8 +109,15 @@ int errorCode = 0;
 // Used to control the blinking of the status leds.
 long lastBlinkRed = 0; 
 long lastBlinkGreen = 0; 
-long lastBlinkBlue = 0;
- 
+
+/* ---- Encoder (volume control) position --- */ 
+// Limit the range
+const int MAX_POS = 31;
+const int MIN_POS = 1;  // Not to think that it is switched off
+int oldPos;
+int volume;
+volatile int encoderPos = MIN_POS; // variables changed within interrupts are volatile
+
 //DEBUG
 bool volatile debugFlag = false;
 
@@ -170,10 +127,14 @@ void setup (void)
 
   pinMode(RED_PIN, OUTPUT);
   pinMode(GREEN_PIN, OUTPUT);
-  pinMode(BLUE_PIN, OUTPUT);
 
   pinMode(STATION_TUNING_OUT_PIN, OUTPUT); 
   pinMode(STATION_TUNING_IN_PIN, OUTPUT); 
+
+  pinMode(encoderPinA, INPUT);
+  pinMode(encoderPinB, INPUT);
+  digitalWrite(encoderPinA, HIGH);
+  digitalWrite(encoderPinB, HIGH);  
   
   // have to send on master in, *slave out*
   pinMode(MISO, OUTPUT);
@@ -186,6 +147,7 @@ void setup (void)
 
   // now turn on interrupts
   SPI.attachInterrupt();
+  attachInterrupt(0, doEncoder, RISING); // encoder pin on interrupt 0 (pin 2) for roatay encoder (volume control) 
 
   state = STATE_INITIAL;
 
@@ -243,19 +205,28 @@ ISR (SPI_STC_vect)
 
 }  // end of interrupt routine SPI_STC_vect
 
+// Rotary control interrupt routine. 
+// The position is limited to MIN_POS to MAX_POS.
+// Note: the driection of count has been chosen due to the orientation
+// of the roraty encoder in the Minibox.
+void doEncoder()
+{
+  if (digitalRead(encoderPinA) == digitalRead(encoderPinB)) {
+    if (encoderPos > MIN_POS) encoderPos--;    //count down if encoder pins are different
+  }
+  else {
+    if (encoderPos <  MAX_POS) encoderPos++;    // count up if both encoder pins are the same
+  }
+} // end of interrupt routine doEncoder
+
 // main loop - wait for flag set in interrupt routine
 void loop()
 {
-  int volume;
-  int band;
+  
   int station;
-  int intensity; 
-
+  
   if (debugFlag) {
-     digitalWrite(BLUE_PIN, HIGH);
-     delay(400);
-     digitalWrite(BLUE_PIN, LOW);
-     debugFlag = false;
+     // ... TODO
   }
 
 
@@ -264,7 +235,6 @@ void loop()
       if (instruction == INST_DEBUG) {
         digitalWrite(GREEN_PIN, LOW);
         digitalWrite(RED_PIN, LOW);
-        band = 0;
         station = 0;
       }
       else if (instruction == INST_STATUS_OK ) {
@@ -274,18 +244,6 @@ void loop()
         errorCode = transferBuffer[INST_STATUS_ERROR];
         Serial.print("Error code rcx:"); Serial.println(errorCode);  
       }
-      else if (instruction == INST_COLOR_RED) {
-        intensity = transferBuffer[INST_COLOR_RED];
-        analogWrite(RED_PIN, intensity);
-      }
-      else if (instruction == INST_COLOR_GREEN) {
-        intensity = transferBuffer[INST_COLOR_GREEN];
-        analogWrite(GREEN_PIN, intensity);
-      }
-       else if (instruction == INST_COLOR_BLUE) {
-        intensity = transferBuffer[INST_COLOR_BLUE];
-        analogWrite(BLUE_PIN, intensity);
-      }
       else {
         error(ERROR_INVALID_INSTRUCTION); 
       }
@@ -293,51 +251,35 @@ void loop()
     }  // end of process instruction
 
     /*****  Continually read in the controls *********/ 
-    
-    // Process volume, reducing the range from 0 to 1023 to 0 to 255
-    volume = analogRead(VOLUME_ANALOG_PIN);
-    volume >>= 2;
-    volume &= 0xFF;  // Just to make sure
 
-
-    // Transfer the volume to the tranferBuffer in a critical section
+    // Process volume in a critical section 
     noInterrupts();
-    transferBuffer[INST_GET_VOL] = volume;
-    interrupts();
-
-//    //DEBUG
-//    if (transferBuffer[INST_GET_VOL][0] > 0) digitalWrite(BLUE_PIN, HIGH);
-//    else digitalWrite(BLUE_PIN, LOW);
-
-   // Process Station DUMMY
-//   station = 10;
-//   noInterrupts();
-//   transferBuffer[INST_GET_STATION] = station  & 0x00FF;
-//   interrupts();
+    volume = encoderPos;
+    if(volume != oldPos)
+    {
+      oldPos = volume;
+      // Transfer the volume to the transferBuffer
+      transferBuffer[INST_GET_VOL] = volume;
+    }
+    interrupts();  
 
    // Read in the station value
+   
    pinMode(STATION_TUNING_IN_PIN, INPUT);
    digitalWrite(STATION_TUNING_OUT_PIN, HIGH);
    int stationVal = analogRead(STATION_TUNING_IN_PIN);
+   
+   //stationVal =- 40;   // EMPERICAL
 
    // Clear for the next measurement
    digitalWrite(STATION_TUNING_OUT_PIN, LOW); 
    pinMode(STATION_TUNING_IN_PIN, OUTPUT);
    noInterrupts();
-   transferBuffer[INST_GET_STATION] = stationVal  & 0x00FF;
+   transferBuffer[INST_GET_STATION] = (stationVal - 40)   & 0x00FF;  // 40 is empirically derived. 
    interrupts();
 
-
-   //Process Band DUMMY
-   band = 2;
-   noInterrupts();
-   transferBuffer[INST_GET_BAND] = band & 0x00FF;
-   interrupts();
-
-
-   // Display the eroor code
+   // Display the error code
    error(errorCode); 
-
 
 }  // end of loop
 
@@ -345,16 +287,13 @@ void error(int errorCode)
 {
   const int red = 0;
   const int green = 1;
-  const int blue = 2;
 
   Serial.print("ErrorCodeMap[");Serial.print(errorCode);Serial.print("] = ");
   
   
   Serial.print(errorCodeMap[errorCode][red]);
   Serial.print(" ");
-  Serial.print(errorCodeMap[errorCode][green]);
-  Serial.print(" ");
-  Serial.println(errorCodeMap[errorCode][blue]);
+  Serial.println(errorCodeMap[errorCode][green]);
   
   
   if (errorCodeMap[errorCode][red] == 0) digitalWrite(RED_PIN, LOW);   
@@ -364,11 +303,6 @@ void error(int errorCode)
   if (errorCodeMap[errorCode][green] == 0) digitalWrite(GREEN_PIN, LOW);   
   if (errorCodeMap[errorCode][green] == 1) digitalWrite(GREEN_PIN, HIGH);   
   if (errorCodeMap[errorCode][green] == 2) blinkGreen();   
-
-  if (errorCodeMap[errorCode][blue] == 0) digitalWrite(BLUE_PIN, LOW);   
-  if (errorCodeMap[errorCode][blue] == 1) digitalWrite(BLUE_PIN, HIGH);   
-  if (errorCodeMap[errorCode][blue] == 2) blinkBlue();   
-
 }
 
 void blinkRed() 
@@ -387,19 +321,10 @@ void blinkGreen()
   }
 }
 
-void blinkBlue() 
-{
-  if (millis() - lastBlinkBlue > 500) {
-    lastBlinkBlue = millis(); 
-    digitalWrite(BLUE_PIN, !digitalRead(BLUE_PIN));  //  Toggle led state
-  }
-}
-
 
 void OK()
 {
   digitalWrite(RED_PIN, LOW);
   digitalWrite(GREEN_PIN, LOW);
-  digitalWrite(BLUE_PIN, LOW);
 }
 

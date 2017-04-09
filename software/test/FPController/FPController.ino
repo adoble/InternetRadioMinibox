@@ -9,28 +9,25 @@
 #include <SPI.h>
 
 
-// Instructions from the FPController
 const byte INST_DEBUG = 0x00;
 const byte INST_GET_STATION = 0x01;
-const byte INST_GET_BAND = 0x02;
-const byte INST_GET_VOL = 0x03;
-const byte INST_GET_TONE = 0x04;
-const byte INST_STATUS_OK = 0x05;
-const byte INST_STATUS_ERROR = 0x06;
-const byte INST_COLOR_RED = 0x07;
-const byte INST_COLOR_GREEN = 0x08;
-const byte INST_COLOR_BLUE = 0x09;
+const byte INST_GET_VOL = 0x02;
+const byte INST_STATUS_OK = 0x03;
+const byte INST_STATUS_ERROR = 0x04;
 
 SerialCommand cli;   // The demo SerialCommand object
 
 long lastInterval;
 boolean repeatFlag;
-boolean verbose = true;
+boolean verbose = false;
 
 byte spiBuffer[1];
 
 // set pin 10 as the slave select (CS) :
 const int slaveSelectPin = 10;
+
+// Hardward Repeat pin for plotting 
+const int hardwareRepeatPin = 3;
 
 void setup() {
   Serial.begin(115200);
@@ -41,8 +38,9 @@ void setup() {
   // set the slaveSelectPin as an output:
   pinMode(slaveSelectPin, OUTPUT);
 
+  pinMode(hardwareRepeatPin, INPUT); 
+
   Serial.println("Enter command (be sure to have CR activated).");
-  Serial.println("     band: Get band");
   Serial.println("     station : Get station");
   Serial.println("     vol: Get volume");
   Serial.println("     ok: Set status OK");
@@ -56,15 +54,11 @@ void setup() {
   Serial.println("     verbose: Set verbose output");
   
 
-  cli.addCommand("band", getStationBand);
   cli.addCommand("station", getStation);
   cli.addCommand("vol", getVolume);
   cli.addCommand("ok", setOK);
   cli.addCommand("error", setError);
   cli.addCommand("debug", setDebug);
-  //cli.addCommand("red", setRed);
-  //cli.addCommand("green", setGreen);
-  //cli.addCommand("blue", setBlue);
   cli.addCommand("*", repeat);
   cli.addCommand("!", stopRepeat);
   cli.addCommand("terse", setTerse);
@@ -75,37 +69,31 @@ void setup() {
 }
 
 void loop() {
-  cli.readSerial();
 
-  if (repeatFlag) {
-    if (lastInterval > -1) {
-      if ( (millis() - lastInterval) > 200) {
-        sendError(12);
-        lastInterval = millis();
+  
+
+  if (digitalRead(hardwareRepeatPin) == HIGH) {
+    delay(250); 
+    getStation();
+  }
+  else {
+    cli.readSerial();
+  
+    if (repeatFlag) {
+      if (lastInterval > -1) {
+        if ( (millis() - lastInterval) > 200) {
+          sendError(12);
+          lastInterval = millis();
+        }
+      } else {
+        lastInterval = millis(); //Initialise
+        
       }
-    } else {
-      lastInterval = millis(); //Initialise
       
     }
-    
   }
 }
 
-void getStationBand()
-{
-  Serial.println("SEND GET_BAND");
-
-    spiBuffer[0] = INST_GET_BAND;
-
-    digitalWrite(slaveSelectPin, LOW);
-    SPI.transfer(spiBuffer, 1);
-    delayMicroseconds(20);
-    byte band = SPI.transfer(0x00);
-    digitalWrite(slaveSelectPin, HIGH);
-
-    Serial.print("Band:");
-    Serial.println(band);
-}
 
 void getStation()
 {
@@ -203,52 +191,37 @@ void setDebug()
   digitalWrite(slaveSelectPin, HIGH);
 }
 
-void setRed() {
-  Serial.print("SEND RED INSTRUCTION");
-  setIntensity(INST_COLOR_RED);
-}
 
-void setGreen() {
-  Serial.print("SEND GREEN INSTRUCTION");
-  setIntensity(INST_COLOR_GREEN);
-}
-
-void setBlue() {
-  Serial.print("SEND BLUE INSTRUCTION");
-  setIntensity(INST_COLOR_BLUE);
-}
-
-
-void setIntensity(byte instruction)
-{
-
-  int intensity;
-
-  char* arg = cli.next();    // Get the next argument from the SerialCommand object buffer
-  if (arg != NULL)      // As long as it existed, take it
-  {
-    Serial.print(" ");
-    Serial.println(arg);
-    // Convert to a number
-    intensity = String(arg).toInt();
-
-    if (intensity >= 0 && intensity <= 255)
-    {
-      spiBuffer[0] = instruction;
-      digitalWrite(slaveSelectPin, LOW);
-      SPI.transfer(spiBuffer[0]);
-      delayMicroseconds(20);   //Wait for the instruction to be processed by the slave.
-
-      // Transfer intensity to slave
-      SPI.transfer(intensity & 0xFF);
-      digitalWrite(slaveSelectPin, HIGH);
-    }
-    else {
-      Serial.println(); Serial.println("No or false intensity parameter entered");
-    }
-  }
-
-}
+//void setIntensity(byte instruction)
+//{
+//
+//  int intensity;
+//
+//  char* arg = cli.next();    // Get the next argument from the SerialCommand object buffer
+//  if (arg != NULL)      // As long as it existed, take it
+//  {
+//    Serial.print(" ");
+//    Serial.println(arg);
+//    // Convert to a number
+//    intensity = String(arg).toInt();
+//
+//    if (intensity >= 0 && intensity <= 255)
+//    {
+//      spiBuffer[0] = instruction;
+//      digitalWrite(slaveSelectPin, LOW);
+//      SPI.transfer(spiBuffer[0]);
+//      delayMicroseconds(20);   //Wait for the instruction to be processed by the slave.
+//
+//      // Transfer intensity to slave
+//      SPI.transfer(intensity & 0xFF);
+//      digitalWrite(slaveSelectPin, HIGH);
+//    }
+//    else {
+//      Serial.println(); Serial.println("No or false intensity parameter entered");
+//    }
+//  }
+//
+//}
 
 void repeat()
 {
