@@ -100,6 +100,7 @@ int errorCodeMap[][3] = {
                       {2,2}   // 8
                   };
 
+
 // The error codes
 const int ERROR_NOT_PRESENT = 0;  // No error
 const int ERROR_INVALID_INSTRUCTION = 26;  
@@ -117,6 +118,13 @@ const int MIN_POS = 1;  // Not to think that it is switched off
 int oldPos;
 int volume;
 volatile int encoderPos = MIN_POS; // variables changed within interrupts are volatile
+
+
+// Sampling of the variable cap, to smotth out the measurements,  
+const int MAX_SAMPLES = 30; // Empirically determined
+int volSamples[MAX_SAMPLES]; 
+int sampleIndex = 0; 
+const int VOL_TOLERANCE = 10;   // Empirically determined
 
 //DEBUG
 bool volatile debugFlag = false;
@@ -222,8 +230,9 @@ void doEncoder()
 // main loop - wait for flag set in interrupt routine
 void loop()
 {
-  
   int station;
+
+  int lowest, highest;
   
   if (debugFlag) {
      // ... TODO
@@ -267,16 +276,31 @@ void loop()
    
    pinMode(STATION_TUNING_IN_PIN, INPUT);
    digitalWrite(STATION_TUNING_OUT_PIN, HIGH);
-   int stationVal = analogRead(STATION_TUNING_IN_PIN);
+   int stationVal = analogRead(STATION_TUNING_IN_PIN); 
+
+   volSamples[sampleIndex++] = stationVal/4; 
+   if (sampleIndex == MAX_SAMPLES) {
+    //Check that the samples are stable
+    lowest = 256; 
+    highest = 0; 
+    for (int i=0; i < MAX_SAMPLES; i++) {
+      lowest = (volSamples[i] < lowest) ?  volSamples[i]: lowest;
+      highest = (volSamples[i] > highest) ?  volSamples[i]: highest;
+    }
+    if ( (highest - lowest) < VOL_TOLERANCE) {
+      noInterrupts();
+      transferBuffer[INST_GET_STATION] = highest & 0x00FF;  
+      interrupts();
+    }
+    sampleIndex = 0; 
+   }
    
    //stationVal =- 40;   // EMPERICAL
 
    // Clear for the next measurement
    digitalWrite(STATION_TUNING_OUT_PIN, LOW); 
    pinMode(STATION_TUNING_IN_PIN, OUTPUT);
-   noInterrupts();
-   transferBuffer[INST_GET_STATION] = (stationVal - 40)   & 0x00FF;  // 40 is empirically derived. 
-   interrupts();
+   
 
    // Display the error code
    error(errorCode); 
