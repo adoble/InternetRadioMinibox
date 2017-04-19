@@ -6,6 +6,11 @@ K RAM SPI
 F http://ww1.microchip.com/downloads/en/DeviceDoc/22100F.pdf
 $ENDCMP
 #
+$CMP ESP8266
+D IN-CIRCUIT ESP8266 BOARD
+F http://wiki.in-circuit.de/images/e/eb/610000292A_handout.pdf
+$ENDCMP
+#
 $CMP EXT-CONN
 D Generic External Connector
 K connector
@@ -13,6 +18,15 @@ $ENDCMP
 #
 $CMP FTDI_BASIC_BOARD
 D FDSI Breakout Board (USB TO RS232) Sparkfun
+$ENDCMP
+#
+$CMP SW_PUSH_SMALL
+F http://www.produktinfo.conrad.com/datenblaetter/700000-724999/701749-da-01-en-TASTSCHALTER_FSM2JH.pdf
+$ENDCMP
+#
+$CMP VS1011e
+D VS1011 MP3 Codec
+F http://www.vlsi.fi/fileadmin/datasheets/vs1011.pdf
 $ENDCMP
 #
 $CMP VS1053_BOARD
