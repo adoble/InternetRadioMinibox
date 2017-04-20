@@ -8,27 +8,29 @@
   *
   *  Instruction Name          Code     Description
   *  ====================      ======   ================================================================
-  *  INST_DEBUG                0x00     Used to debug
-  *  INST_GET_STATION          0x01     Delivers one byte representing up 256 stations per band 
-  *                                     (i.e. uses all 8 bits)
+  *  INST_NULL                0x00      Null instruction
+  *  INST_GET_STATION          0x01     Delivers one byte representing up 256 stations
+  *                                     (i.e. uses all 8 bits), altough this is restricted to 10 stations
+  *                                     due to inaccurcies in reading the variable capacitance value.
   *  INST_GET_VOL              0x03     Delivers one byte representing up to 256 levels of the
   *                                     set volume
   *  INST_STATUS_OK            0x05     Used to indicate that the status is OK. No data is received or
   *                                     transmitted
   *  INST_STATUS_ERROR         0x06     Used to indicate an error status. One byte with the error code is
-  *                                     transmitted. Value is from 0 (=OK) to 8. 
+  *                                     transmitted. Value is from 0 (=OK) to 8.
  */
 
 #include <SPI.h>
 
 volatile boolean processInstruction;
 volatile char instruction;
-
+/// The number of stations that can be selected
+const int NUMBER_STATIONS = 10;
 
 // Instructions codes need to start at 0x00 and be contiguous
-const int NUMBER_INSTRUCTIONS = 5;   
+const int NUMBER_INSTRUCTIONS = 5;
 
-const byte INST_DEBUG = 0x00;
+const byte INST_NULL = 0x00;
 const byte INST_GET_STATION = 0x01;
 const byte INST_GET_VOL = 0x02;
 const byte INST_STATUS_OK = 0x03;
@@ -38,21 +40,10 @@ const byte READ = 0x00;
 const byte WRITE = 0x01;
 const byte NO_TRANSFER = 0x03;
 
-// Array with the number of bytes received or transmitted for
-// each instruction. The array is indexed by the instruction code
-// int nBytesPerInstruction[] = {
-//                               0, // INST_DEBUG = 0x00;   // Used fr debug instruction
-//                               1, // INST_GET_STATION = 0x01, i.e.up to 256 stations per band
-//                               2, // INST_GET_VOL = 0x03, up to 32 volume levels
-//                               0, // INST_STATUS_OK = 0x05
-//                               1  // INST_STATUS_ERROR = 0x06
-//                              };
-
 // Array to specify if the instruction is read, write or if no transfer of bytes takes place.
 // The array is indexed by the instruction code.
-
 int instructionTypes[] = {
-                              NO_TRANSFER , // INST_DEBUG = 0x00;
+                              NO_TRANSFER , // INST_NULL = 0x00;
                               READ, // INST_GET_STATION = 0x01,
                               READ, // INST_GET_VOL = 0x03
                               NO_TRANSFER, // INST_STATUS_OK = 0x05
@@ -75,16 +66,16 @@ byte volatile state = STATE_INITIAL;
 // Number of bytes to transfer
 int volatile nBytes = 0;
 
-// Pins 
+// Pins
 const int GREEN_PIN = 3;    // Green LED
 const int RED_PIN = 5;      // Red LED
-const int encoderPinA = 2;  // Interrupt 0 pin for rotary encoder (volume control) 
-const int encoderPinB = 4;  // Other pin for for rotary encoder (volume control) 
+const int encoderPinA = 2;  // Interrupt 0 pin for rotary encoder (volume control)
+const int encoderPinB = 4;  // Other pin for for rotary encoder (volume control)
 
 const int STATION_TUNING_OUT_PIN = A5;
 const int STATION_TUNING_IN_PIN = A4;
 
-// Error code mapping to the red, green LEDS in that order. 
+// Error code mapping to the red, green LEDS in that order.
 //    0  = off
 //    1  = on
 //    2 = blink
@@ -103,15 +94,15 @@ int errorCodeMap[][3] = {
 
 // The error codes
 const int ERROR_NOT_PRESENT = 0;  // No error
-const int ERROR_INVALID_INSTRUCTION = 26;  
-                  
+const int ERROR_INVALID_INSTRUCTION = 26;
+
 int errorCode = 0;
 
 // Used to control the blinking of the status leds.
-long lastBlinkRed = 0; 
-long lastBlinkGreen = 0; 
+long lastBlinkRed = 0;
+long lastBlinkGreen = 0;
 
-/* ---- Encoder (volume control) position --- */ 
+/* ---- Encoder (volume control) position --- */
 // Limit the range
 const int MAX_POS = 31;
 const int MIN_POS = 1;  // Not to think that it is switched off
@@ -120,11 +111,15 @@ int volume;
 volatile int encoderPos = MIN_POS; // variables changed within interrupts are volatile
 
 
-// Sampling of the variable cap, to smotth out the measurements,  
+/* ----- Sampling of the variable cap, to smooth out the measurements ---- */
 const int MAX_SAMPLES = 30; // Empirically determined
-int volSamples[MAX_SAMPLES]; 
-int sampleIndex = 0; 
-const int VOL_TOLERANCE = 10;   // Empirically determined
+int capSamples[MAX_SAMPLES];
+int sampleIndex = 0;
+const int CAP_NOISE_TOLERANCE = 10;   // Empirically determined
+
+const int MIN_CAP_VALUE = 50;    // Empirically determined
+const int MAX_CAP_VALUE = 200;   // Empirically determined
+
 
 //DEBUG
 bool volatile debugFlag = false;
@@ -136,14 +131,14 @@ void setup (void)
   pinMode(RED_PIN, OUTPUT);
   pinMode(GREEN_PIN, OUTPUT);
 
-  pinMode(STATION_TUNING_OUT_PIN, OUTPUT); 
-  pinMode(STATION_TUNING_IN_PIN, OUTPUT); 
+  pinMode(STATION_TUNING_OUT_PIN, OUTPUT);
+  pinMode(STATION_TUNING_IN_PIN, OUTPUT);
 
   pinMode(encoderPinA, INPUT);
   pinMode(encoderPinB, INPUT);
   digitalWrite(encoderPinA, HIGH);
-  digitalWrite(encoderPinB, HIGH);  
-  
+  digitalWrite(encoderPinB, HIGH);
+
   // have to send on master in, *slave out*
   pinMode(MISO, OUTPUT);
 
@@ -155,7 +150,7 @@ void setup (void)
 
   // now turn on interrupts
   SPI.attachInterrupt();
-  attachInterrupt(0, doEncoder, RISING); // encoder pin on interrupt 0 (pin 2) for roatay encoder (volume control) 
+  attachInterrupt(0, doEncoder, RISING); // encoder pin on interrupt 0 (pin 2) for roatay encoder (volume control)
 
   state = STATE_INITIAL;
 
@@ -213,7 +208,7 @@ ISR (SPI_STC_vect)
 
 }  // end of interrupt routine SPI_STC_vect
 
-// Rotary control interrupt routine. 
+// Rotary control interrupt routine.
 // The position is limited to MIN_POS to MAX_POS.
 // Note: the driection of count has been chosen due to the orientation
 // of the roraty encoder in the Minibox.
@@ -231,9 +226,8 @@ void doEncoder()
 void loop()
 {
   int station;
-
   int lowest, highest;
-  
+
   if (debugFlag) {
      // ... TODO
   }
@@ -241,7 +235,7 @@ void loop()
 
   if (processInstruction)
     {
-      if (instruction == INST_DEBUG) {
+      if (instruction == INST_NULL) {
         digitalWrite(GREEN_PIN, LOW);
         digitalWrite(RED_PIN, LOW);
         station = 0;
@@ -251,17 +245,17 @@ void loop()
       }
       else if (instruction == INST_STATUS_ERROR) {
         errorCode = transferBuffer[INST_STATUS_ERROR];
-        Serial.print("Error code rcx:"); Serial.println(errorCode);  
+        Serial.print("Error code rcx:"); Serial.println(errorCode);
       }
       else {
-        error(ERROR_INVALID_INSTRUCTION); 
+        error(ERROR_INVALID_INSTRUCTION);
       }
     processInstruction= false;
     }  // end of process instruction
 
-    /*****  Continually read in the controls *********/ 
+    /*****  Continually read in the controls *********/
 
-    // Process volume in a critical section 
+    // Process volume in a critical section
     noInterrupts();
     volume = encoderPos;
     if(volume != oldPos)
@@ -270,40 +264,37 @@ void loop()
       // Transfer the volume to the transferBuffer
       transferBuffer[INST_GET_VOL] = volume;
     }
-    interrupts();  
+    interrupts();
 
    // Read in the station value
-   
    pinMode(STATION_TUNING_IN_PIN, INPUT);
    digitalWrite(STATION_TUNING_OUT_PIN, HIGH);
-   int stationVal = analogRead(STATION_TUNING_IN_PIN); 
+   int stationVal = analogRead(STATION_TUNING_IN_PIN);
 
-   volSamples[sampleIndex++] = stationVal/4; 
+   capSamples[sampleIndex++] = stationVal/4;
    if (sampleIndex == MAX_SAMPLES) {
     //Check that the samples are stable
-    lowest = 256; 
-    highest = 0; 
+    lowest = 256;
+    highest = 0;
     for (int i=0; i < MAX_SAMPLES; i++) {
-      lowest = (volSamples[i] < lowest) ?  volSamples[i]: lowest;
-      highest = (volSamples[i] > highest) ?  volSamples[i]: highest;
+      lowest = (capSamples[i] < lowest) ?  capSamples[i]: lowest;
+      highest = (capSamples[i] > highest) ?  capSamples[i]: highest;
     }
-    if ( (highest - lowest) < VOL_TOLERANCE) {
+    if ( (highest - lowest) < CAP_NOISE_TOLERANCE) {
       noInterrupts();
-      transferBuffer[INST_GET_STATION] = highest & 0x00FF;  
+      station = map(highest, MIN_CAP_VALUE, MAX_CAP_VALUE, 0, NUMBER_STATIONS);
+      transferBuffer[INST_GET_STATION] = station & 0x00FF;
       interrupts();
     }
-    sampleIndex = 0; 
+    sampleIndex = 0;
    }
-   
-   //stationVal =- 40;   // EMPERICAL
-
    // Clear for the next measurement
-   digitalWrite(STATION_TUNING_OUT_PIN, LOW); 
+   digitalWrite(STATION_TUNING_OUT_PIN, LOW);
    pinMode(STATION_TUNING_IN_PIN, OUTPUT);
-   
+
 
    // Display the error code
-   error(errorCode); 
+   error(errorCode);
 
 }  // end of loop
 
@@ -313,34 +304,34 @@ void error(int errorCode)
   const int green = 1;
 
   Serial.print("ErrorCodeMap[");Serial.print(errorCode);Serial.print("] = ");
-  
-  
+
+
   Serial.print(errorCodeMap[errorCode][red]);
   Serial.print(" ");
   Serial.println(errorCodeMap[errorCode][green]);
-  
-  
-  if (errorCodeMap[errorCode][red] == 0) digitalWrite(RED_PIN, LOW);   
-  if (errorCodeMap[errorCode][red] == 1) digitalWrite(RED_PIN, HIGH);   
-  if (errorCodeMap[errorCode][red] == 2) blinkRed();   
 
-  if (errorCodeMap[errorCode][green] == 0) digitalWrite(GREEN_PIN, LOW);   
-  if (errorCodeMap[errorCode][green] == 1) digitalWrite(GREEN_PIN, HIGH);   
-  if (errorCodeMap[errorCode][green] == 2) blinkGreen();   
+
+  if (errorCodeMap[errorCode][red] == 0) digitalWrite(RED_PIN, LOW);
+  if (errorCodeMap[errorCode][red] == 1) digitalWrite(RED_PIN, HIGH);
+  if (errorCodeMap[errorCode][red] == 2) blinkRed();
+
+  if (errorCodeMap[errorCode][green] == 0) digitalWrite(GREEN_PIN, LOW);
+  if (errorCodeMap[errorCode][green] == 1) digitalWrite(GREEN_PIN, HIGH);
+  if (errorCodeMap[errorCode][green] == 2) blinkGreen();
 }
 
-void blinkRed() 
+void blinkRed()
 {
   if (millis() - lastBlinkRed > 500) {
-    lastBlinkRed = millis(); 
+    lastBlinkRed = millis();
     digitalWrite(RED_PIN, !digitalRead(RED_PIN));  //  Toggle led state
   }
 }
 
-void blinkGreen() 
+void blinkGreen()
 {
   if (millis() - lastBlinkGreen > 500) {
-    lastBlinkGreen = millis(); 
+    lastBlinkGreen = millis();
     digitalWrite(GREEN_PIN, !digitalRead(GREEN_PIN));  //  Toggle led state
   }
 }
@@ -351,4 +342,3 @@ void OK()
   digitalWrite(RED_PIN, LOW);
   digitalWrite(GREEN_PIN, LOW);
 }
-
