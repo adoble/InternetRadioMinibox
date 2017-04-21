@@ -226,7 +226,7 @@ void doEncoder()
 void loop()
 {
   int station;
-  int lowest, highest;
+  int lowest, highest;   // Range of noisy measurements of the variable cap.
 
   if (debugFlag) {
      // ... TODO

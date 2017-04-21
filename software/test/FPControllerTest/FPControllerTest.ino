@@ -9,7 +9,7 @@
 #include <SPI.h>
 
 
-const byte INST_DEBUG = 0x00;
+const byte INST_NULL = 0x00;
 const byte INST_GET_STATION = 0x01;
 const byte INST_GET_VOL = 0x02;
 const byte INST_STATUS_OK = 0x03;
@@ -26,7 +26,7 @@ byte spiBuffer[1];
 // set pin 10 as the slave select (CS) :
 const int slaveSelectPin = 10;
 
-// Hardward Repeat pin for plotting 
+// Hardward Repeat pin for plotting
 const int hardwareRepeatPin = 3;
 
 void setup() {
@@ -38,26 +38,28 @@ void setup() {
   // set the slaveSelectPin as an output:
   pinMode(slaveSelectPin, OUTPUT);
 
-  pinMode(hardwareRepeatPin, INPUT); 
+  pinMode(hardwareRepeatPin, INPUT);
 
   Serial.println("Enter command (be sure to have CR activated).");
   Serial.println("     station : Get station");
   Serial.println("     vol: Get volume");
   Serial.println("     ok: Set status OK");
   Serial.println("     error <<error code  0 - 26>>: Set status error");
+  Serial.println("     null: Null instruction");
   Serial.println("     debug: Debug instruction");
- 
+
   Serial.println();
   Serial.println("     *: Repeat instruction");
   Serial.println("     !: Stop Repeat");
   Serial.println("     terse: Set terse output");
   Serial.println("     verbose: Set verbose output");
-  
+
 
   cli.addCommand("station", getStation);
   cli.addCommand("vol", getVolume);
   cli.addCommand("ok", setOK);
   cli.addCommand("error", setError);
+  cli.addCommand("null", sendNull);
   cli.addCommand("debug", setDebug);
   cli.addCommand("*", repeat);
   cli.addCommand("!", stopRepeat);
@@ -70,15 +72,15 @@ void setup() {
 
 void loop() {
 
-  
+
 
   if (digitalRead(hardwareRepeatPin) == HIGH) {
-    delay(250); 
+    delay(250);
     getStation();
   }
   else {
     cli.readSerial();
-  
+
     if (repeatFlag) {
       if (lastInterval > -1) {
         if ( (millis() - lastInterval) > 200) {
@@ -87,9 +89,9 @@ void loop() {
         }
       } else {
         lastInterval = millis(); //Initialise
-        
+
       }
-      
+
     }
   }
 }
@@ -153,13 +155,13 @@ void setError()
   if (arg != NULL)      // As long as it existed, take it
   {
     Serial.print(" Error code: ");
-    
+
     // Convert to a number
     errorCode = String(arg).toInt();
     Serial.println(errorCode);
     if (errorCode >= 0 && errorCode <= 26)
     {
-      sendError(errorCode); 
+      sendError(errorCode);
     }
     else {
       Serial.println(); Serial.println("No or false error code entered");
@@ -168,15 +170,24 @@ void setError()
 
 }
 
-void sendError(int errorCode) 
+void sendError(int errorCode)
 {
   spiBuffer[0] = INST_STATUS_ERROR;
   digitalWrite(slaveSelectPin, LOW);
   SPI.transfer(spiBuffer[0]);
   delayMicroseconds(20);   //Wait for the instruction to be processed by the slave.
-  
+
   // Transfer error code  to slave
   SPI.transfer(errorCode & 0xFF);
+  digitalWrite(slaveSelectPin, HIGH);
+}
+
+void sendNull()
+{
+  Serial.println("SEND NULL INSTRUCTION");
+  spiBuffer[0] = INST_NULL;
+  digitalWrite(slaveSelectPin, LOW);
+  SPI.transfer(spiBuffer, 1);
   digitalWrite(slaveSelectPin, HIGH);
 }
 
@@ -229,7 +240,7 @@ void repeat()
 
   repeatFlag = true;
 
-  
+
 }
 
 void stopRepeat()
