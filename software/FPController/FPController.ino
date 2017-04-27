@@ -12,15 +12,16 @@
   *  INST_GET_STATION          0x01     Delivers one byte representing up 256 stations
   *                                     (i.e. uses all 8 bits), altough this is restricted to 10 stations
   *                                     due to inaccurcies in reading the variable capacitance value.
-  *  INST_GET_VOL              0x03     Delivers one byte representing up to 256 levels of the
+  *  INST_GET_VOL              0x02     Delivers one byte representing up to 256 levels of the
   *                                     set volume
-  *  INST_STATUS_OK            0x05     Used to indicate that the status is OK. No data is received or
+  *  INST_STATUS_OK            0x03     Used to indicate that the status is OK. No data is received or
   *                                     transmitted
-  *  INST_STATUS_ERROR         0x06     Used to indicate an error status. One byte with the error code is
+  *  INST_STATUS_ERROR         0x04     Used to indicate an error status. One byte with the error code is
   *                                     transmitted. Value is from 0 (=OK) to 8.
  */
 
 #include <SPI.h>
+#include <EEPROM.h>
 
 volatile boolean processInstruction;
 volatile char instruction;
@@ -54,14 +55,17 @@ int instructionTypes[] = {
 // for the buffer
 byte transferBuffer[NUMBER_INSTRUCTIONS];
 
-
 // The states used during SPI transfer
-const byte STATE_INITIAL = 0;
-const byte STATE_RECEIVE_DATA = 1;
-const byte STATE_TRANSMIT_DATA = 2;
+const byte SPI_STATE_INITIAL = 0;
+const byte SPI_STATE_RECEIVE_DATA = 1;
+const byte SPI_STATE_TRANSMIT_DATA = 2;
+
+
 
 // The current state
-byte volatile state = STATE_INITIAL;
+byte volatile spiState = SPI_STATE_INITIAL;  // Changedin the SPI interrup routine
+
+
 
 // Number of bytes to transfer
 int volatile nBytes = 0;
@@ -88,13 +92,13 @@ int errorCodeMap[][3] = {
                       {1,2},  // 5
                       {2,0},  // 6
                       {2,1},  // 7
-                      {2,2}   // 8
+                      {2,2}   // 8  = Invalid instruction
                   };
 
 
 // The error codes
 const int ERROR_NOT_PRESENT = 0;  // No error
-const int ERROR_INVALID_INSTRUCTION = 26;
+const int ERROR_INVALID_INSTRUCTION = 8;
 
 int errorCode = 0;
 
@@ -106,9 +110,10 @@ long lastBlinkGreen = 0;
 // Limit the range
 const int MAX_POS = 31;
 const int MIN_POS = 1;  // Not to think that it is switched off
-int oldPos;
-int volume;
+byte oldVolume;
+byte volume;
 volatile int encoderPos = MIN_POS; // variables changed within interrupts are volatile
+const byte DEFAULT_ENCODER_POS = (MAX_POS - MIN_POS)/ 2; // The default position value for the rotary encoder, i.e. half way
 
 
 /* ----- Sampling of the variable cap, to smooth out the measurements ---- */
@@ -119,6 +124,11 @@ const int CAP_NOISE_TOLERANCE = 10;   // Empirically determined
 
 const int MIN_CAP_VALUE = 50;    // Empirically determined
 const int MAX_CAP_VALUE = 200;   // Empirically determined
+
+// EEPROM Settings. Note the EEPROM is used to store the last volume setting
+const byte EEPROM_ID = 0x99; // Used to identify if valid data in EEPROM
+const int  ID_ADDR = 0;    // The address used to store the EEPROM ID
+const int  ENCODER_POS_ADDR = 1;    // The address used to store the last encoder position
 
 
 //DEBUG
@@ -152,7 +162,26 @@ void setup (void)
   SPI.attachInterrupt();
   attachInterrupt(0, doEncoder, RISING); // encoder pin on interrupt 0 (pin 2) for roatay encoder (volume control)
 
-  state = STATE_INITIAL;
+  // Set up the SPI state variable
+  spiState = SPI_STATE_INITIAL;
+
+  // Read the old encoder position from the EEPROM
+  byte id = EEPROM.read(ID_ADDR);
+  if (id == EEPROM_ID) {
+    // Valid data has been written to the EEPROM
+    encoderPos = EEPROM.read(ENCODER_POS_ADDR);
+  }
+  else {
+    // The ID has not been found so write the default data to the EEPROM
+    EEPROM.write(ID_ADDR, EEPROM_ID);
+    EEPROM.write(ENCODER_POS_ADDR, DEFAULT_ENCODER_POS);
+    encoderPos = DEFAULT_ENCODER_POS;
+  }
+  // Move the volume into the transfer buffer
+  transferBuffer[INST_GET_VOL] = toVolume(encoderPos);
+
+
+
 
 }  // end of setup
 
@@ -163,8 +192,8 @@ ISR (SPI_STC_vect)
   byte data;
   //byte data = SPDR;  // grab byte from SPI Data Register
 
-  switch (state) {
-      case STATE_INITIAL:
+  switch (spiState) {
+      case SPI_STATE_INITIAL:
         //  SPDR (and now data) contain an instruction
         //     NOTE: this does no handle the case of a instruction requiring both
         //     read and write. Need to restucture to do this, but for the
@@ -172,36 +201,39 @@ ISR (SPI_STC_vect)
         data = SPDR;  // grab byte from SPI Data Register
         instruction = data;
 
+        // If invalid instruction then ignore
+        if (instruction < 0 || instruction >= NUMBER_INSTRUCTIONS)  return;
+
         switch (instructionTypes[instruction]) {
             case READ:        processInstruction = false;
                               // Move the first byte of the tranmitted data into
                               // the SPDR register in preparation for the
                               // next transfer
                               SPDR = transferBuffer[instruction];
-                              state = STATE_TRANSMIT_DATA;
+                              spiState = SPI_STATE_TRANSMIT_DATA;
                               break;
-            case WRITE:       state = STATE_RECEIVE_DATA;
+            case WRITE:       spiState = SPI_STATE_RECEIVE_DATA;
                               processInstruction = false;
                               break;
-            case NO_TRANSFER: state = STATE_INITIAL;
+            case NO_TRANSFER: spiState = SPI_STATE_INITIAL;
                               processInstruction = true;
                               break;
             }
          break;
-      case STATE_TRANSMIT_DATA:
+      case SPI_STATE_TRANSMIT_DATA:
         // Transfer the  data for the current instruction from the
         // transfer buffer into SPDR
         SPDR = transferBuffer[instruction];
-        state = STATE_INITIAL;  // All data has been  transmitted and the master should have read it all.
+        spiState = SPI_STATE_INITIAL;  // All data has been  transmitted and the master should have read it all.
         break;
-      case STATE_RECEIVE_DATA:
+      case SPI_STATE_RECEIVE_DATA:
          data = SPDR;  // grab byte from SPI Data Register
          transferBuffer[instruction] = (byte) data;
          processInstruction = true;
-         state = STATE_INITIAL;
+         spiState = SPI_STATE_INITIAL;
          break;
       default:
-         state = STATE_INITIAL;
+         spiState = SPI_STATE_INITIAL;
          break;
     }
 
@@ -210,8 +242,8 @@ ISR (SPI_STC_vect)
 
 // Rotary control interrupt routine.
 // The position is limited to MIN_POS to MAX_POS.
-// Note: the driection of count has been chosen due to the orientation
-// of the roraty encoder in the Minibox.
+// Note: the direction of count has been chosen due to the orientation
+// of the rotary encoder in the Minibox.
 void doEncoder()
 {
   if (digitalRead(encoderPinA) == digitalRead(encoderPinB)) {
@@ -220,6 +252,7 @@ void doEncoder()
   else {
     if (encoderPos <  MAX_POS) encoderPos++;    // count up if both encoder pins are the same
   }
+
 } // end of interrupt routine doEncoder
 
 // main loop - wait for flag set in interrupt routine
@@ -236,8 +269,9 @@ void loop()
   if (processInstruction)
     {
       if (instruction == INST_NULL) {
-        digitalWrite(GREEN_PIN, LOW);
-        digitalWrite(RED_PIN, LOW);
+        errorCode = 0;
+//        digitalWrite(GREEN_PIN, LOW);
+//        digitalWrite(RED_PIN, LOW);
         station = 0;
       }
       else if (instruction == INST_STATUS_OK ) {
@@ -248,7 +282,7 @@ void loop()
         Serial.print("Error code rcx:"); Serial.println(errorCode);
       }
       else {
-        error(ERROR_INVALID_INSTRUCTION);
+        errorCode = ERROR_INVALID_INSTRUCTION;
       }
     processInstruction= false;
     }  // end of process instruction
@@ -257,14 +291,15 @@ void loop()
 
     // Process volume in a critical section
     noInterrupts();
-    volume = encoderPos;
-    if(volume != oldPos)
-    {
-      oldPos = volume;
+    volume = toVolume(encoderPos);
+    if (volume != oldVolume) {
+      oldVolume = volume;
       // Transfer the volume to the transferBuffer
       transferBuffer[INST_GET_VOL] = volume;
     }
     interrupts();
+    // Now store the new position of the rotary encoder in the EEPROM
+    EEPROM.write(ENCODER_POS_ADDR, encoderPos);
 
    // Read in the station value
    pinMode(STATION_TUNING_IN_PIN, INPUT);
@@ -342,3 +377,9 @@ void OK()
   digitalWrite(RED_PIN, LOW);
   digitalWrite(GREEN_PIN, LOW);
 }
+
+/* Translates and encoder position to a volume */
+byte toVolume(byte anEncoderPos) {
+  return anEncoderPos;   // Simple translation
+}
+

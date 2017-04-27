@@ -47,6 +47,7 @@ void setup() {
   Serial.println("     error <<error code  0 - 26>>: Set status error");
   Serial.println("     null: Null instruction");
   Serial.println("     debug: Debug instruction");
+  Serial.println("     invalid: Invalid instruction");
 
   Serial.println();
   Serial.println("     *: Repeat instruction");
@@ -60,6 +61,8 @@ void setup() {
   cli.addCommand("ok", setOK);
   cli.addCommand("error", setError);
   cli.addCommand("null", sendNull);
+  cli.addCommand("invalid", sendInvalidInstruction);
+  
   cli.addCommand("debug", setDebug);
   cli.addCommand("*", repeat);
   cli.addCommand("!", stopRepeat);
@@ -68,6 +71,8 @@ void setup() {
   cli.addDefaultHandler(unrecognized);  // Handler for command that isn't matched  (says "What?")
 
   SPI.begin();
+
+  sendNull(); // To reset THIS IS IMPORTANT --> Make it a reset function the master
 }
 
 void loop() {
@@ -76,7 +81,8 @@ void loop() {
 
   if (digitalRead(hardwareRepeatPin) == HIGH) {
     delay(250);
-    getStation();
+    //getStation();
+    sendNull();
   }
   else {
     cli.readSerial();
@@ -175,7 +181,7 @@ void sendError(int errorCode)
   spiBuffer[0] = INST_STATUS_ERROR;
   digitalWrite(slaveSelectPin, LOW);
   SPI.transfer(spiBuffer[0]);
-  delayMicroseconds(20);   //Wait for the instruction to be processed by the slave.
+  delayMicroseconds(20);   // Wait for the instruction to be processed by the slave.
 
   // Transfer error code  to slave
   SPI.transfer(errorCode & 0xFF);
@@ -200,6 +206,18 @@ void setDebug()
   digitalWrite(slaveSelectPin, LOW);
   SPI.transfer(spiBuffer, 1);
   digitalWrite(slaveSelectPin, HIGH);
+}
+
+void sendInvalidInstruction()
+{
+  Serial.println("SEND INVALID INSTRUCTION");
+  Serial.println("Should be ignored");
+
+  spiBuffer[0] = 27;
+  digitalWrite(slaveSelectPin, LOW);
+  SPI.transfer(spiBuffer, 1);
+  digitalWrite(slaveSelectPin, HIGH);
+  delayMicroseconds(20);   // Wait for the instruction to be processed by the slave.
 }
 
 
