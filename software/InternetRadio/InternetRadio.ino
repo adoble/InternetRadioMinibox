@@ -11,7 +11,8 @@
 *    TO DO - In addition it reads front panel settings  (e..g volume, station etc.) from
 *      an external AVR chip (configured as Arduino) over an SPI interface. This
 *      happens periodically when the interrupt service rounting (ISR) is triggered. The code
-*      for the external AVM micro-controller can be found at TODO XXXXXXXXX
+*      for the external AVM micro-controller can be found at software/FPController (FP means
+*      Front Panel).
 *
 * Standard Libraries
 * ==================
@@ -56,16 +57,16 @@ const int XDCS = 16;
 // Pin setup for the 23K256 RAM
 const int RAMCS = 15;     // Chip select for the external rRAM used for the ring buffer
 
-// Setup the VS1053 Lemom player using standard hardware SPI pins
+// Setup the VS1053 Lemon player using standard hardware SPI pins
 Lemon_VS1053 player = Lemon_VS1053(XRST, XCS, XDCS, DREQ);
 
 // Set up the external RAM as a ring buffer
 SPIRingBuffer ringBuffer(RAMCS);
 
-// Flag to ensure that the ring buffer is fully leaded on startup
+// Flag to ensure that the ring buffer is fully loaded on startup
 bool bufferInitialized = false;
 
-// The threshold at which the buffer will be faster loaded.
+// The threshold at which the buffer will be loaded at a faster rate (i.e. to cacth up).
 const int THRESHOLD = ringBuffer.RING_BUFFER_LENGTH / 5;   // 20%
 
 // The skip flag to allow the buffer to catch up
@@ -77,11 +78,12 @@ volatile int checkControlStatus = 0;
 ESP8266WiFiMulti WiFiMulti;
 HTTPClient http;
 
-// WiFi configuration
+// WiFi configuration using the defines in credentials.h
 const char* ssid     = WIFI_SSID;
 const char* password = WIFI_PWD;
 
-// Web page to access
+// URL of radio staion to access.
+// TODO replace this with code so that it can be configured by the user
 //String station= "http://rpr1.fmstreams.de/stream1";   // RPR1   64kps
 String station= "http://217.151.151.90:80/rpr-80er-128-mp3";   // RPR1   128kps
 //String station= "http://rpr1.fmstreams.de/rpr-80er-128-mp3";   // RPR1 Best of the 80s - 128kbs
@@ -91,7 +93,7 @@ String station= "http://217.151.151.90:80/rpr-80er-128-mp3";   // RPR1   128kps
 //String station = "http://www.andrew-doble.homepage.t-online.de/";  //TEST
 //String station = "http://ledjamradio.ice.infomaniak.ch/ledjamradio.mp3";
 
-// Create a buffer for to readin the mp3 data. Thsi is set to DATABUFFERLEN as this
+// Create a buffer to read in the mp3 data. Set to DATABUFFERLEN as this
 // is the amount that can be transfered to the VS1053 in one SPI operation.
 const int DATABUFFERLEN = 32;
 uint8_t mp3Buffer[DATABUFFERLEN];
@@ -103,10 +105,12 @@ String currentStation;
 // number of byte availble in the read stream
 size_t nBytes;
 
-// Pointer to  the payload stream, i.e. the MP3 data from the internet station.
+// Pointer to the payload stream, i.e. the MP3 data from the internet station.
 WiFiClient * stream;
 
 // Default setting for the tone control
+// TODO the minbox does not have a tone control.
+// TODO Before removing see what default setting sounds best.
 int toneControl = 0;
 
 
@@ -127,14 +131,9 @@ void setup() {
     //USE_SERIAL.setDebugOutput(true);  //!!!!!
 
     // So we know what version we are running
+    // TODO review this in light of using Git
     USE_SERIAL.println(programName);
     USE_SERIAL.println();
-
-//     for(uint8_t t = 4; t > 0; t--) {
-//         USE_SERIAL.printf("[SETUP] WAIT %d...\n", t);
-//         USE_SERIAL.flush();
-//         delay(1000);
-//     }
 
   // Before initialising using the libraries  make sure that the CS pins are
   // in the right state
@@ -165,9 +164,9 @@ void setup() {
   }
 
 
-    // Make sure the VS1053 is in MP3 mode. For some this is not the case.
+    // Make sure the VS1053 is in MP3 mode.
+    // For some MP3 decoder boards this is not the case.
     while (!player.readyForData()) {yield();}
-
     player.setMP3Mode();
 
     // Set the volume
@@ -176,6 +175,8 @@ void setup() {
     player.dumpRegs();
 
     // Connect to the WIFI access point
+    // TODO  need to refactor so that a connection can be
+    // reestablished after being lost
     Serial.println("Attempting to connect to WIFI AP");
 
     WiFiMulti.addAP(ssid, password);  // Only adding ONE access point
@@ -205,7 +206,7 @@ void setup() {
       // start connection and send HTTP header
       int httpCode = http.GET();
       if(httpCode > 0) {
-          // HTTP header has been send and Server response header has been handled
+          // HTTP header has been sent and server response header has been handled
           USE_SERIAL.printf("[HTTP] GET... code: %d\n", httpCode);
 
           // file found at server
@@ -251,7 +252,7 @@ void loop() {
       //    =================   =================     ===============
       //      >=DATABUFFERLEN   >DATABUFFERLEN         DATABUFFERLEN
       //      >=DATABUFFERLEN   <=DATABUFFERLEN        nBytes
-      //      <DATABUFFERLEN          -               availableSpace
+      //      <DATABUFFERLEN          -                availableSpace
 
       if (ringBuffer.availableSpace() < DATABUFFERLEN) maxBytesToRead = ringBuffer.availableSpace();
       else maxBytesToRead = (nBytes> DATABUFFERLEN ? DATABUFFERLEN : nBytes);
@@ -269,10 +270,10 @@ void loop() {
   }   // -- if bufferInitialized
 
   // Adding data to buffer
-  // is ring buffer full?
+  // Is ring buffer full?
   //    no:   is source data available?
-  //            yes: read source, data --> ring buffer
-  //            no:  no-op
+  //           yes: read source, data --> ring buffer
+  //           no:  no-op
   //    yes: no-op
   //
   if (bufferInitialized) {
@@ -290,6 +291,7 @@ void loop() {
   }
 
   // Test of the tone control
+  //TODO  The minibox has no tone control. Find a default that sounds best.
   if (bufferInitialized && checkControlStatus == 1) {
     checkControlStatus = 0;
     if (toneControl == -15) toneControl = 15;
@@ -300,7 +302,7 @@ void loop() {
 
 
   // Skip a transfer to the VS1053 to give the buffer a chance to reload if
-  // has the data amout has fallen below THRESHOLD
+  //  the data amout has fallen below THRESHOLD
   skip = ((bufferInitialized && (ringBuffer.availableData() < THRESHOLD)) ? (skip++)%2 : 0);
 
   // Moving data to VS1053
@@ -331,8 +333,8 @@ void loop() {
 
 /*
  *  Handles HTTP redirects
- *  As there are currently difficulties in finding a site that has redriects
- *  this function has NOT BEEN TESTED
+ *  As there are currently difficulties in finding a site that has redirects
+ *  FIXME this function has NOT BEEN TESTED
  */
 void handleRedirect() {
     String newSite;
@@ -358,7 +360,7 @@ void handleRedirect() {
             // TODO add this code
             break;
           default:
-            // HTTP cde retuned that cannot be handled
+            // AN HTTP code has been returned that cannot be handled
             handleOtherCode(httpCode);
             break;
         }
