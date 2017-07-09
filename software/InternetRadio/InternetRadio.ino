@@ -41,8 +41,9 @@
 #include <SPI.h>
 #include "Lemon_VS1053.h"
 #include "SPIRingBuffer.h"
+#include "credentials.h"
 
-const char programName[] = "InternetRadioV15";
+const char programName[] = "InternetRadioV16";
 
 #define USE_SERIAL Serial
 
@@ -77,8 +78,8 @@ ESP8266WiFiMulti WiFiMulti;
 HTTPClient http;
 
 // WiFi configuration
-const char* ssid     = "@@SECRET WLAN SSID here";
-const char* password = "@@SECRET WLAN AP password here";
+const char* ssid     = WIFI_SSID;
+const char* password = WIFI_PWD;
 
 // Web page to access
 //String station= "http://rpr1.fmstreams.de/stream1";   // RPR1   64kps
