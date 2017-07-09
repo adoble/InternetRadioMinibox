@@ -1,0 +1,7 @@
+EESchema-DOCLIB  Version 2.0
+#
+$CMP LM386-RESCUE-InternetRadioMiniBox
+F http://www.ti.com/lit/ds/symlink/lm386.pdf
+$ENDCMP
+#
+#End Doc Library
