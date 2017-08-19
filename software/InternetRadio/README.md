@@ -1,3 +1,6 @@
 This contains the source code for the main processor, an ESP8266 with Arduino bootloader.
 
-Currently this corresponds to local  version 15. 
+Before compiling, edit `creditials_CUSTOMIZE.h`:
+
+1. **Replace** the strings with your actual wireless LAN SSID and password
+2. **Change** the file name to `credentials.h`
