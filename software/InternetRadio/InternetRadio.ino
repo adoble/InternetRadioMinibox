@@ -82,7 +82,7 @@ HTTPClient http;
 const char* ssid     = WIFI_SSID;
 const char* password = WIFI_PWD;
 
-// URL of radio staion to access.
+// URL of radio staion to access. Uncomment what is wanted.
 // TODO replace this with code so that it can be configured by the user
 //String station= "http://rpr1.fmstreams.de/stream1";   // RPR1   64kps
 String station= "http://217.151.151.90:80/rpr-80er-128-mp3";   // RPR1   128kps
@@ -115,6 +115,7 @@ int toneControl = 0;
 
 
 // Function prototypes
+void connectWLAN(const char*, const char*);
 void handleRedirect();
 void handleOtherCode(int);
 String getStationURL();
@@ -154,7 +155,7 @@ void setup() {
 
 
   // Initialise the ring buffer
-  ringBuffer.begin();
+  ringBuffer.begin();   //TODO is the buffer too long, resulting in too long a delay?
 
 
   // Initialize the player
@@ -169,7 +170,8 @@ void setup() {
     while (!player.readyForData()) {yield();}
     player.setMP3Mode();
 
-    // Set the volume
+    // Set the volume.
+    // TODO replace with values read from the front panel controller
     while (!player.readyForData()) {yield();}
     player.setVolume(30,30);  // Higher is quieter.
     player.dumpRegs();
@@ -177,18 +179,10 @@ void setup() {
     // Connect to the WIFI access point
     // TODO  need to refactor so that a connection can be
     // reestablished after being lost
-    Serial.println("Attempting to connect to WIFI AP");
+    Serial.print("Attempting to connect to WIFI AP ");
+    Serial.println(ssid);
 
-    WiFiMulti.addAP(ssid, password);  // Only adding ONE access point
-    // wait for WiFi connection
-    while((WiFiMulti.run() != WL_CONNECTED)) {
-      USE_SERIAL.print(".");
-      yield();
-      delay(10);
-    }
-    USE_SERIAL.println();
-    USE_SERIAL.println("Connected to WIFI AP");
-
+    connectWLAN(ssid, password);
 
       // Get the station
       currentStation =  getStationURL();
@@ -329,6 +323,32 @@ void loop() {
 
 }
 
+/* Connect to the wireless LAN */
+void connectWLAN(const char* ssid, const char* password) {
+   //WiFiMulti.addAP(ssid, password);  // Only adding ONE access point
+   // wait for WiFi connection
+   //while((WiFiMulti.run() != WL_CONNECTED)) {
+  //   USE_SERIAL.print(".");
+  //   yield();
+  //   delay(10);
+   //}
+   //USE_SERIAL.println();
+   //USE_SERIAL.println("Connected to WIFI AP");
+
+   /* NEW CODE see https://github.com/esp8266/Arduino/blob/master/libraries/ESP8266WiFi/examples/WiFiClient/WiFiClient.ino */
+   WiFi.mode(WIFI_STA);
+   WiFi.begin(ssid, password);
+   while((WiFi.status() != WL_CONNECTED)) {
+     yield();
+     delay(500);
+     USE_SERIAL.print(".");
+   }
+   USE_SERIAL.println();
+   USE_SERIAL.println("Connected to WIFI AP");
+   USE_SERIAL.print("IP Address: ");
+   USE_SERIAL.println(WiFi.localIP());
+
+}
 
 
 /*
