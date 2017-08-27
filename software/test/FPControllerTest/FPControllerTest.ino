@@ -72,7 +72,7 @@ void setup() {
 
   SPI.begin();
 
-  sendNull(); // To reset THIS IS IMPORTANT --> Make it a reset function the master
+  FP_begin(); // To reset THIS IS IMPORTANT --> Make it a reset function the master
 }
 
 void loop() {
@@ -82,7 +82,7 @@ void loop() {
   if (digitalRead(hardwareRepeatPin) == HIGH) {
     delay(250);
     //getStation();
-    sendNull();
+    FP_begin(); 
   }
   else {
     cli.readSerial();
@@ -107,40 +107,60 @@ void getStation()
 {
    if (verbose) Serial.println("SEND GET_STATION");
 
-   spiBuffer[0] = INST_GET_STATION;
+   unsigned int selectedStation = FP_getStation();
+   
+   if (verbose) Serial.println("Station:");
+   Serial.println(selectedStation);
+}
+
+/** 
+ *  Get the selected station from the front panel controller. 
+ */
+unsigned int FP_getStation() {
+   unsigned int station;
 
    digitalWrite(slaveSelectPin, LOW);
-   SPI.transfer(spiBuffer, 1);
+   SPI.transfer(INST_GET_STATION);
    delayMicroseconds(20);
-   byte station = SPI.transfer(0x00);
+   station = SPI.transfer(0x00);
    digitalWrite(slaveSelectPin, HIGH);
 
-   if (verbose) Serial.println("Station:");
-   Serial.println(station);
-}
+   return station; 
+ }
 
 void getVolume()
 {
-         // DEBUG
-        Serial.println("SEND GET_VOL");
-
-        spiBuffer[0] = INST_GET_VOL;
-
-        digitalWrite(slaveSelectPin, LOW);
-        SPI.transfer(spiBuffer[0]);
-        delayMicroseconds(20);   //Wait for the instruction to be processed by the slave.
-
-        // Transfer byte) from the slave and pack it into an unsigned int
-        unsigned int volume  = SPI.transfer(0x00);
-        digitalWrite(slaveSelectPin, HIGH);
-
-        Serial.print("Volume:");
-        Serial.print(volume);
-        Serial.print(" | ");
-        Serial.print(volume, BIN);
-        Serial.print(" | ");
-        Serial.println(volume, HEX);
+  // DEBUG
+  Serial.println("SEND GET_VOL");
+  
+  unsigned int volume = FP_getVolume(); 
+  
+  Serial.print("Volume:");
+  Serial.print(volume);
+  Serial.print(" | ");
+  Serial.print(volume, BIN);
+  Serial.print(" | ");
+  Serial.println(volume, HEX);
 }
+
+/*
+ * Get the volume set from the front panel controller.
+ */
+unsigned int FP_getVolume() {
+  unsigned int volume;
+  
+  digitalWrite(slaveSelectPin, LOW);
+  SPI.transfer(INST_GET_VOL);
+  delayMicroseconds(20);   //Wait for the instruction to be processed by the slave.
+  
+  // Transfer byte) from the slave and pack it into an unsigned int
+  volume  = SPI.transfer(0x00);
+  digitalWrite(slaveSelectPin, HIGH);
+  
+  return volume;
+}
+
+
 
 
 void setOK() {
@@ -281,3 +301,13 @@ void unrecognized()
 {
   Serial.println("What?");
 }
+
+
+void FP_begin() {
+  Serial.println("SEND NULL INSTRUCTION TO RESET");
+  spiBuffer[0] = INST_NULL;
+  digitalWrite(slaveSelectPin, LOW);
+  SPI.transfer(spiBuffer, 1);
+  digitalWrite(slaveSelectPin, HIGH);
+}
+
