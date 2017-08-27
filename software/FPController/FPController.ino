@@ -1,30 +1,30 @@
 
 /**
   *
-  * Front Panel controller for the internet radio. It eithzer reads values from the front pannel or
+  * Front Panel controller for the internet radio. It either reads values from the front panel or
   * controls indicators on it.
-  * This is configured as  an SPI slave. It receives instructions (as one byte) from the SPI
+  * This is configured as an SPI slave. It receives instructions (as one byte) from the SPI
   * master. The behavour depends on the instruction:
   *
   *  Instruction Name          Code     Description
   *  ====================      ======   ================================================================
-  *  INST_NULL                0x00      Null instruction
-  *  INST_GET_STATION          0x01     Delivers one byte representing up 256 stations
-  *                                     (i.e. uses all 8 bits), altough this is restricted to 10 stations
-  *                                     due to inaccurcies in reading the variable capacitance value.
-  *  INST_GET_VOL              0x02     Delivers one byte representing up to 256 levels of the
-  *                                     set volume
+  *  INST_NULL                 0x00     Null instruction
+  *  INST_GET_STATION          0x01     Delivers one byte representing up 10 stations.
+  *  INST_GET_VOL              0x02     Delivers one byte representing the volume. This has a value from
+  *                                     1 to 31. 
   *  INST_STATUS_OK            0x03     Used to indicate that the status is OK. No data is received or
   *                                     transmitted
   *  INST_STATUS_ERROR         0x04     Used to indicate an error status. One byte with the error code is
-  *                                     transmitted. Value is from 0 (=OK) to 8.
+  *                                     transmitted. Value is from 0 (= OK) to 8.
  */
 
 #include <SPI.h>
 #include <EEPROM.h>
 
+// SPI instruction handling from the interrupts
 volatile boolean processInstruction;
 volatile char instruction;
+
 /// The number of stations that can be selected
 const int NUMBER_STATIONS = 10;
 
@@ -45,10 +45,10 @@ const byte NO_TRANSFER = 0x03;
 // The array is indexed by the instruction code.
 int instructionTypes[] = {
                               NO_TRANSFER , // INST_NULL = 0x00;
-                              READ, // INST_GET_STATION = 0x01,
-                              READ, // INST_GET_VOL = 0x03
-                              NO_TRANSFER, // INST_STATUS_OK = 0x05
-                              WRITE    // INST_STATUS_ERROR = 0x06
+                              READ,         // INST_GET_STATION = 0x01,
+                              READ,         // INST_GET_VOL = 0x03
+                              NO_TRANSFER,  // INST_STATUS_OK = 0x05
+                              WRITE         // INST_STATUS_ERROR = 0x06
                           };
 
 // The buffer containing the data to be transfered indexed by the instruction
@@ -60,14 +60,10 @@ const byte SPI_STATE_INITIAL = 0;
 const byte SPI_STATE_RECEIVE_DATA = 1;
 const byte SPI_STATE_TRANSMIT_DATA = 2;
 
-
-
 // The current state
 byte volatile spiState = SPI_STATE_INITIAL;  // Changedin the SPI interrup routine
 
-
-
-// Number of bytes to transfer
+// Number of bytes transfered
 int volatile nBytes = 0;
 
 // Pins
@@ -116,7 +112,7 @@ volatile int encoderPos = MIN_POS; // variables changed within interrupts are vo
 const byte DEFAULT_ENCODER_POS = (MAX_POS - MIN_POS)/ 2; // The default position value for the rotary encoder, i.e. half way
 
 
-/* ----- Sampling of the variable cap, to smooth out the measurements ---- */
+/* ----- Sampling of the variable cap, to smooth out the (noisy) measurements ---- */
 const int MAX_SAMPLES = 30; // Empirically determined
 int capSamples[MAX_SAMPLES];
 int sampleIndex = 0;
@@ -129,10 +125,6 @@ const int MAX_CAP_VALUE = 200;   // Empirically determined
 const byte EEPROM_ID = 0x99; // Used to identify if valid data in EEPROM
 const int  ID_ADDR = 0;    // The address used to store the EEPROM ID
 const int  ENCODER_POS_ADDR = 1;    // The address used to store the last encoder position
-
-
-//DEBUG
-bool volatile debugFlag = false;
 
 void setup (void)
 {
@@ -168,8 +160,10 @@ void setup (void)
   // Read the old encoder position from the EEPROM
   byte id = EEPROM.read(ID_ADDR);
   if (id == EEPROM_ID) {
-    // Valid data has been written to the EEPROM
+    // Apparently valid data has been written to the EEPROM
     encoderPos = EEPROM.read(ENCODER_POS_ADDR);
+    //However, if not valid then set to the defualt value; 
+    if (encoderPos > MAX_POS || encoderPos < MIN_POS) encoderPos = DEFAULT_ENCODER_POS;
   }
   else {
     // The ID has not been found so write the default data to the EEPROM
@@ -180,21 +174,22 @@ void setup (void)
   // Move the volume into the transfer buffer
   transferBuffer[INST_GET_VOL] = toVolume(encoderPos);
 
-
-
-
 }  // end of setup
 
 
-// SPI interrupt routine
+/** 
+ * SPI interrupt routine 
+ * 
+ * Implemented as a simple state machine to reading in the instructions 
+ * and any data associated with them. 
+ */
 ISR (SPI_STC_vect)
 {
   byte data;
-  //byte data = SPDR;  // grab byte from SPI Data Register
 
   switch (spiState) {
       case SPI_STATE_INITIAL:
-        //  SPDR (and now data) contain an instruction
+        //  SPDR  contain an instruction
         //     NOTE: this does no handle the case of a instruction requiring both
         //     read and write. Need to restucture to do this, but for the
         //     SPIslave controller for the internet radio this is not required.
@@ -236,14 +231,15 @@ ISR (SPI_STC_vect)
          spiState = SPI_STATE_INITIAL;
          break;
     }
-
-
 }  // end of interrupt routine SPI_STC_vect
 
-// Rotary control interrupt routine.
-// The position is limited to MIN_POS to MAX_POS.
-// Note: the direction of count has been chosen due to the orientation
-// of the rotary encoder in the Minibox.
+/**
+ * Rotary control interrupt routine.
+ * 
+ * The position is limited to MIN_POS to MAX_POS.
+ * Note: the direction of count has been chosen due to the orientation
+ * of the rotary encoder in the Minibox.
+ */
 void doEncoder()
 {
   if (digitalRead(encoderPinA) == digitalRead(encoderPinB)) {
@@ -261,17 +257,10 @@ void loop()
   int station;
   int lowest, highest;   // Range of noisy measurements of the variable cap.
 
-  if (debugFlag) {
-     // ... TODO
-  }
-
-
-  if (processInstruction)
+   if (processInstruction)
     {
       if (instruction == INST_NULL) {
         errorCode = 0;
-//        digitalWrite(GREEN_PIN, LOW);
-//        digitalWrite(RED_PIN, LOW);
         station = 0;
       }
       else if (instruction == INST_STATUS_OK ) {
@@ -298,6 +287,7 @@ void loop()
       transferBuffer[INST_GET_VOL] = volume;
     }
     interrupts();
+
     // Now store the new position of the rotary encoder in the EEPROM
     EEPROM.write(ENCODER_POS_ADDR, encoderPos);
 
@@ -327,7 +317,6 @@ void loop()
    digitalWrite(STATION_TUNING_OUT_PIN, LOW);
    pinMode(STATION_TUNING_IN_PIN, OUTPUT);
 
-
    // Display the error code
    error(errorCode);
 
@@ -337,14 +326,6 @@ void error(int errorCode)
 {
   const int red = 0;
   const int green = 1;
-
-  Serial.print("ErrorCodeMap[");Serial.print(errorCode);Serial.print("] = ");
-
-
-  Serial.print(errorCodeMap[errorCode][red]);
-  Serial.print(" ");
-  Serial.println(errorCodeMap[errorCode][green]);
-
 
   if (errorCodeMap[errorCode][red] == 0) digitalWrite(RED_PIN, LOW);
   if (errorCodeMap[errorCode][red] == 1) digitalWrite(RED_PIN, HIGH);
@@ -380,6 +361,6 @@ void OK()
 
 /* Translates and encoder position to a volume */
 byte toVolume(byte anEncoderPos) {
-  return anEncoderPos;   // Simple translation
+ return anEncoderPos;   // Simple translation
 }
 
