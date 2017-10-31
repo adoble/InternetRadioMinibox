@@ -1,0 +1,67 @@
+Arduino: 1.8.2 (Windows 7), Board: "Pro Trinket 3V/12MHz (USB)"
+
+Archiving built core (caching) in: C:\Users\adoble\AppData\Local\Temp\arduino_cache_232193\core\core_adafruit_avr_protrinket3_0c812875ac70eb4a9b385d8fb077f54c.a
+Sketch uses 1984 bytes (6%) of program storage space. Maximum is 28672 bytes.
+Global variables use 192 bytes of dynamic memory.
+C:\Program Files (x86)\Arduino\hardware\tools\avr/bin/avrdude -CC:\Program Files (x86)\Arduino\hardware\tools\avr/etc/avrdude.conf -v -patmega328p -cstk500 -PCOM10 -Uflash:w:C:\Users\adoble\AppData\Local\Temp\arduino_build_924258/ProgTest.ino.hex:i 
+
+avrdude: Version 6.3, compiled on Jan 17 2017 at 12:00:53
+         Copyright (c) 2000-2005 Brian Dean, http://www.bdmicro.com/
+         Copyright (c) 2007-2014 Joerg Wunsch
+
+         System wide configuration file is "C:\Program Files (x86)\Arduino\hardware\tools\avr/etc/avrdude.conf"
+
+         Using Port                    : COM10
+         Using Programmer              : stk500
+         AVR Part                      : ATmega328P
+         Chip Erase delay              : 9000 us
+         PAGEL                         : PD7
+         BS2                           : PC2
+         RESET disposition             : dedicated
+         RETRY pulse                   : SCK
+         serial program mode           : yes
+         parallel program mode         : yes
+         Timeout                       : 200
+         StabDelay                     : 100
+         CmdexeDelay                   : 25
+         SyncLoops                     : 32
+         ByteDelay                     : 0
+         PollIndex                     : 3
+         PollValue                     : 0x53
+         Memory Detail                 :
+
+                                  Block Poll               Page                       Polled
+           Memory Type Mode Delay Size  Indx Paged  Size   Size #Pages MinW  MaxW   ReadBack
+           ----------- ---- ----- ----- ---- ------ ------ ---- ------ ----- ----- ---------
+           eeprom        65    20     4    0 no       1024    4      0  3600  3600 0xff 0xff
+           flash         65     6   128    0 yes     32768  128    256  4500  4500 0xff 0xff
+           lfuse          0     0     0    0 no          1    0      0  4500  4500 0x00 0x00
+           hfuse          0     0     0    0 no          1    0      0  4500  4500 0x00 0x00
+           efuse          0     0     0    0 no          1    0      0  4500  4500 0x00 0x00
+           lock           0     0     0    0 no          1    0      0  4500  4500 0x00 0x00
+           calibration    0     0     0    0 no          1    0      0     0     0 0x00 0x00
+           signature      0     0     0    0 no          3    0      0     0     0 0x00 0x00
+
+         Programmer Type : STK500V2
+         Description     : Atmel STK500
+         Programmer Model: STK500
+         Hardware Version: 15
+         Firmware Version Master : 2.10
+         Topcard         : Unknown
+         Vtarget         : 3.3 V
+         SCK period      : 8.7 us
+         Varef           : 0.0 V
+         Oscillator      : Off
+
+An error occurred while uploading the sketch
+avrdude: stk500v2_command(): command failed
+avrdude: initialization failed, rc=-1
+         Double check connections and try again, or use -F to override
+         this check.
+
+
+avrdude done.  Thank you.
+
+This report would have more information with
+"Show verbose output during compilation"
+option enabled in File -> Preferences.
