@@ -18,7 +18,7 @@
   *                                     transmitted. Value is from 0 (= OK) to 8.
   *  INST_GET_CHANGES          0x05     Gets a byte from the  FPController whose bits indicated what has changed.
   *                                     Once read the FPController sets ALL bits back to zero.
-  *  INST_RESET_CHANGES        0x06     Resets the change bits. This should be used after ALL changes have                       
+  *  INST_RESET_CHANGES        0x06     Resets the change bits. This should be used after ALL changes have
   *                                     been processed.
   *
   *
@@ -187,7 +187,7 @@ void setup (void)
   if (id == EEPROM_ID) {
     // Apparently valid data has been written to the EEPROM
     encoderPos = EEPROM.read(ENCODER_POS_ADDR);
-    //However, if not valid then set to the defualt value;
+    //However, if not valid then set to the default value;
     if (encoderPos > MAX_POS || encoderPos < MIN_POS) encoderPos = DEFAULT_ENCODER_POS;
   }
   else {
@@ -200,10 +200,10 @@ void setup (void)
   transferBuffer[INST_GET_VOL] = toVolume(encoderPos);
 
   // Set that there has been a change so that the initial values are read
-  transferBuffer[INST_GET_CHANGES] = 0; 
+  transferBuffer[INST_GET_CHANGES] = 0;
   bitSet(transferBuffer[INST_GET_CHANGES], CHANGED_VOL_BIT);
   bitSet(transferBuffer[INST_GET_CHANGES], CHANGED_STATION_BIT);
-  
+
 
 }  // end of setup
 
@@ -295,7 +295,7 @@ void loop()
         station = 0;
       }
       else if (instruction == INST_RESET_CHANGES) {
-        transferBuffer[INST_GET_CHANGES] = 0; 
+        transferBuffer[INST_GET_CHANGES] = 0;
       }
       else if (instruction == INST_STATUS_OK ) {
         OK();
@@ -317,11 +317,11 @@ void loop()
     volume = toVolume(encoderPos);
     if (volume != oldVolume) {
       oldVolume = volume;
-      bitSet(transferBuffer[INST_GET_CHANGES], CHANGED_VOL_BIT);  
+      bitSet(transferBuffer[INST_GET_CHANGES], CHANGED_VOL_BIT);
       // Transfer the volume to the transferBuffer
       transferBuffer[INST_GET_VOL] = volume;
-    } 
-   
+    }
+
     interrupts();
 
     // Now store the new position of the rotary encoder in the EEPROM
@@ -346,11 +346,11 @@ void loop()
       if (station != oldStation) {
         oldStation = station;
         noInterrupts();
-        bitSet(transferBuffer[INST_GET_CHANGES], CHANGED_STATION_BIT);   
+        bitSet(transferBuffer[INST_GET_CHANGES], CHANGED_STATION_BIT);
         transferBuffer[INST_GET_STATION] = station & 0x00FF;
         interrupts();
       }
-      
+
     }
     sampleIndex = 0;
    }
