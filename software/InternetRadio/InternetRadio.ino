@@ -46,6 +46,17 @@
 
 const char programName[] = "InternetRadioV16";
 
+// Front panel controller instruction codes
+// TODO move these into a header file
+const byte INST_NULL = 0x00;
+const byte INST_GET_STATION = 0x01;
+const byte INST_GET_VOL = 0x02;
+const byte INST_STATUS_OK = 0x03;
+const byte INST_STATUS_ERROR = 0x04;
+const byte INST_GET_CHANGES  = 0x05;
+const byte INST_RESET_CHANGES = 0x06;
+
+
 #define USE_SERIAL Serial
 
 // Pin setup for the VS1053
@@ -56,6 +67,10 @@ const int XDCS = 16;
 
 // Pin setup for the 23K256 RAM
 const int RAMCS = 15;     // Chip select for the external rRAM used for the ring buffer
+
+// Pin setup for the AVR chip used as front panel controller
+const int FPCS = 0;
+
 
 // Setup the VS1053 Lemon player using standard hardware SPI pins
 Lemon_VS1053 player = Lemon_VS1053(XRST, XCS, XDCS, DREQ);
@@ -126,7 +141,7 @@ void handleRedirect();
 void handleOtherCode(int);
 String getStationURL();
 
-void inline handler (void){
+void inline timerHandler (void){
   checkControlStatus = 1;
   timer0_write(ESP.getCycleCount() + 41660000);
 }
@@ -150,12 +165,14 @@ void setup() {
   digitalWrite(XDCS, HIGH);
   pinMode(RAMCS, OUTPUT);
   digitalWrite(RAMCS, HIGH);
+  pinMode(FPCS, OUTPUT);
+  digitalWrite(FPCS, HIGH);
   delay(1);
 
   // Set up the timer interupt
   noInterrupts();
   timer0_isr_init();
-  timer0_attachInterrupt(handler);
+  timer0_attachInterrupt(timerHandler);
   timer0_write(ESP.getCycleCount() + 41660000);
   interrupts();
 
@@ -296,6 +313,12 @@ void loop() {
     else toneControl = toneControl -1;
     USE_SERIAL.println(toneControl);
     player.setTone(toneControl);
+
+    unsigned int volume = getVolume();
+    int playerVol = map(volume, 1, 31, 200, 0);
+    
+    player.setVolume(playerVol,playerVol);
+
   }
 
 
@@ -406,6 +429,23 @@ String getStationURL()
 {
    return stations[1];  // RPR 80s
 
+}
+
+/*
+ * Get the volume set from the front panel controller.
+ */
+unsigned int getVolume() {
+  unsigned int volume;
+
+  digitalWrite(FPCS, LOW);
+  SPI.transfer(INST_GET_VOL);
+  delayMicroseconds(20);   //Wait for the instruction to be processed by the slave.
+
+  // Transfer byte) from the slave and pack it into an unsigned int
+  volume  = SPI.transfer(0x00);
+  digitalWrite(FPCS, HIGH);
+
+  return volume;
 }
 
 
