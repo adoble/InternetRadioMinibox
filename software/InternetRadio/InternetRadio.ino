@@ -84,8 +84,14 @@ const char* password = WIFI_PWD;
 
 // URL of radio staion to access. Uncomment what is wanted.
 // TODO replace this with code so that it can be configured by the user
-//String station= "http://rpr1.fmstreams.de/stream1";   // RPR1   64kps
-String station= "http://217.151.151.90:80/rpr-80er-128-mp3";   // RPR1   128kps
+const int NUMBER_STATIONS = 2;
+//String station= "http://rpr1.fmstreams.de/stream1";   // RPR1   64kps  OBSOLEATE
+String stations[NUMBER_STATIONS] = {
+  "http://rpr1.radio.net/",   // RPR1
+  "http://217.151.151.90:80/rpr-80er-128-mp3" // RPR1 Best of the 80s - 128kbs
+};
+//String station= "http://rpr1.radio.net/";"
+//String station= "http://217.151.151.90:80/rpr-80er-128-mp3";   // RPR1   128kps
 //String station= "http://rpr1.fmstreams.de/rpr-80er-128-mp3";   // RPR1 Best of the 80s - 128kbs
 //String station= "http://swr-mp3-m-swr3.akacast.akamaistream.net/7/720/137136/v1/gnl.akacast.akamaistream.net/swr-mp3-m-swr3";   // SWR3 - 128kbs
 
@@ -234,8 +240,6 @@ void loop() {
   int nRead = 0;
   int maxBytesToRead;
 
-
-
   if (!bufferInitialized) {
     // Load up the buffer
     nBytes = stream->available();
@@ -325,17 +329,7 @@ void loop() {
 
 /* Connect to the wireless LAN */
 void connectWLAN(const char* ssid, const char* password) {
-   //WiFiMulti.addAP(ssid, password);  // Only adding ONE access point
-   // wait for WiFi connection
-   //while((WiFiMulti.run() != WL_CONNECTED)) {
-  //   USE_SERIAL.print(".");
-  //   yield();
-  //   delay(10);
-   //}
-   //USE_SERIAL.println();
-   //USE_SERIAL.println("Connected to WIFI AP");
 
-   /* NEW CODE see https://github.com/esp8266/Arduino/blob/master/libraries/ESP8266WiFi/examples/WiFiClient/WiFiClient.ino */
    WiFi.mode(WIFI_STA);
    WiFi.begin(ssid, password);
    while((WiFi.status() != WL_CONNECTED)) {
@@ -410,7 +404,7 @@ void handleOtherCode(int httpCode) {
  */
 String getStationURL()
 {
-   return station;
+   return stations[1];  // RPR 80s
 
 }
 
