@@ -56,6 +56,10 @@ const byte INST_STATUS_ERROR = 0x04;
 const byte INST_GET_CHANGES  = 0x05;
 const byte INST_RESET_CHANGES = 0x06;
 
+// Changed status bits
+const byte CHANGED_VOL_BIT     = 0;     // The volume has changed
+const byte CHANGED_STATION_BIT = 1;     // A new station has been selected
+
 
 #define USE_SERIAL Serial
 
@@ -141,10 +145,11 @@ void handleRedirect();
 void handleOtherCode(int);
 String getStationURL();
 
+
 void inline timerHandler (void){
   checkControlStatus = 1;
   //timer0_write(ESP.getCycleCount() + 41660000); // Period 470 mS
-  timer0_write(ESP.getCycleCount() + 20830000); // Period 235 mS?
+  timer0_write(ESP.getCycleCount() + 20830000); // Period 235 mS
   
   
 }
@@ -196,11 +201,11 @@ void setup() {
     while (!player.readyForData()) {yield();}
     player.setMP3Mode();
 
-    // Set the volume.
-    // TODO replace with values read from the front panel controller
-    while (!player.readyForData()) {yield();}
-    player.setVolume(30,30);  // Higher is quieter.
-    player.dumpRegs();
+    // Set the initial volume by reading from the front panal controller
+       while (!player.readyForData()) {yield();}
+//    player.setVolume(30,30);  // Higher is quieter.
+//    player.dumpRegs();
+      adjustVolume(); 
 
     // Connect to the WIFI access point
     // TODO  need to refactor so that a connection can be
@@ -317,10 +322,15 @@ void loop() {
     USE_SERIAL.println(toneControl);
     player.setTone(toneControl);
 
-    unsigned int volume = getVolume();
-    int playerVol = map(volume, 1, 31, 200, 0);
+    unsigned int changes = getChanges();  
+    if (changes &  1 << CHANGED_VOL_BIT) {
+      adjustVolume();
+    }
+    if (changes &  1 << CHANGED_STATION_BIT) {
+      // TODO Change station. 
+    }
     
-    player.setVolume(playerVol,playerVol);
+
 
   }
 
@@ -434,6 +444,15 @@ String getStationURL()
 
 }
 
+// Get the volument from the front panal controller 
+// and adjust it on the player.
+void adjustVolume() {
+    unsigned int volume = getVolume();
+    int playerVol = map(volume, 1, 31, 200, 0);
+    
+    player.setVolume(playerVol,playerVol);
+}
+
 /*
  * Get the volume set from the front panel controller.
  */
@@ -451,6 +470,20 @@ unsigned int getVolume() {
   return volume;
 }
 
+// Get the change status from the front panal controller
+unsigned int getChanges() {
+  unsigned int changes;
+
+  digitalWrite(FPCS, LOW);
+  SPI.transfer(INST_GET_CHANGES);
+  delayMicroseconds(20);   //Wait for the instruction to be processed by the slave.
+
+  // Transfer byte) from the slave and pack it into an unsigned int
+  changes = SPI.transfer(0x00);
+  digitalWrite(FPCS, HIGH);
+
+  return changes;
+}
 
 
 // Set the VS1053 chip into MP3 mode
