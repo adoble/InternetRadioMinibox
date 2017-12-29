@@ -143,7 +143,10 @@ String getStationURL();
 
 void inline timerHandler (void){
   checkControlStatus = 1;
-  timer0_write(ESP.getCycleCount() + 41660000);
+  //timer0_write(ESP.getCycleCount() + 41660000); // Period 470 mS
+  timer0_write(ESP.getCycleCount() + 20830000); // Period 235 mS?
+  
+  
 }
 
 void setup() {
