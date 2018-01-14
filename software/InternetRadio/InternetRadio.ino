@@ -85,13 +85,15 @@ SPIRingBuffer ringBuffer(RAMCS);
 // Flag to ensure that the ring buffer is fully loaded on startup
 bool bufferInitialized = false;
 
-// The threshold at which the buffer will be loaded at a faster rate (i.e. to cacth up).
+// The threshold at which the buffer will be loaded at a faster rate (i.e. to catch up).
 const int THRESHOLD = ringBuffer.RING_BUFFER_LENGTH / 5;   // 20%
 
 // The skip flag to allow the buffer to catch up
 int skip = 0;
 
 volatile int checkControlStatus = 0;
+
+int loopCount = 0;
 
 // Setup the WIFI objects
 ESP8266WiFiMulti WiFiMulti;
@@ -103,20 +105,24 @@ const char* password = WIFI_PWD;
 
 // URL of radio staion to access. Uncomment what is wanted.
 // TODO replace this with code so that it can be configured by the user
-const int NUMBER_STATIONS = 2;
+const int NUMBER_STATIONS = 10;
 //String station= "http://rpr1.fmstreams.de/stream1";   // RPR1   64kps  OBSOLEATE
 String stations[NUMBER_STATIONS] = {
-  "http://rpr1.radio.net/",   // RPR1
-  "http://217.151.151.90:80/rpr-80er-128-mp3" // RPR1 Best of the 80s - 128kbs
-};
-//String station= "http://rpr1.radio.net/";"
-//String station= "http://217.151.151.90:80/rpr-80er-128-mp3";   // RPR1   128kps
-//String station= "http://rpr1.fmstreams.de/rpr-80er-128-mp3";   // RPR1 Best of the 80s - 128kbs
-//String station= "http://swr-mp3-m-swr3.akacast.akamaistream.net/7/720/137136/v1/gnl.akacast.akamaistream.net/swr-mp3-m-swr3";   // SWR3 - 128kbs
+  //"http://217.151.151.90:80/rpr-80er-128-mp3", // RPR1 Best of the 80s - 128kbs
+  "http://streams.rpr1.de/rpr-kaiserslautern-128-mp3",
+  "http://streams.rp1.de/rpr-80er-128-mp3", // RPR1 Best of the 80s - 128kbs
+  "http://swr-swr3-live.cast.addradio.de/swr/swr3/live/mp3/128/stream.mp3", // SWR3 - 128kps
+  "http://bbcmedia.ic.llnwd.net/stream/bbcmedia_radio1_mf_p?s=1484901640&e=1484916040&h=0f66aa9663a84ce5183be725ec127cad",  // BBC1
+  "http://bbcmedia.ic.llnwd.net/stream/bbcmedia_radio2_mf_p?s=1484901608&e=1484916008&h=1c6ffbe262747262e4c6267fd2f54bc1",  // BBC2
+  "http://listen.181fm.com/181-classical_128k.mp3",  // Classical
+  "http://mp3channels.webradio.antenne.de/antenne",   // Antenne
+  "http://chai5she.cdn.dvmr.fr:80/fip-webradio1.mp3",  // FIP autour du rock
+  "http://wdr-wdr3-live.icecast.wdr.de/wdr/wdr3/live/mp3/128/stream.mp3",  // WDR 3
+  "http://185.52.127.157/de/33001/mp3_128.mp3"  // NRJ Berlin
+  };
 
+  //NOTE for RPR1 Stations see http://streams.rpr1.de/
 
-//String station = "http://www.andrew-doble.homepage.t-online.de/";  //TEST
-//String station = "http://ledjamradio.ice.infomaniak.ch/ledjamradio.mp3";
 
 // Create a buffer to read in the mp3 data. Set to DATABUFFERLEN as this
 // is the amount that can be transfered to the VS1053 in one SPI operation.
@@ -133,12 +139,6 @@ size_t nBytes;
 // Pointer to the payload stream, i.e. the MP3 data from the internet station.
 WiFiClient * stream;
 
-// Default setting for the tone control
-// TODO the minbox does not have a tone control.
-// TODO Before removing see what default setting sounds best.
-int toneControl = 0;
-
-
 // Function prototypes
 void connectWLAN(const char*, const char*);
 void handleRedirect();
@@ -150,8 +150,8 @@ void inline timerHandler (void){
   checkControlStatus = 1;
   //timer0_write(ESP.getCycleCount() + 41660000); // Period 470 mS
   timer0_write(ESP.getCycleCount() + 20830000); // Period 235 mS
-  
-  
+
+
 }
 
 void setup() {
@@ -178,11 +178,11 @@ void setup() {
   delay(1);
 
   // Set up the timer interupt
-  noInterrupts();
-  timer0_isr_init();
-  timer0_attachInterrupt(timerHandler);
-  timer0_write(ESP.getCycleCount() + 41660000);
-  interrupts();
+//  noInterrupts();
+//  timer0_isr_init();
+//  timer0_attachInterrupt(timerHandler);
+//  timer0_write(ESP.getCycleCount() + 41660000);
+//  interrupts();
 
 
   // Initialise the ring buffer
@@ -203,9 +203,9 @@ void setup() {
 
     // Set the initial volume by reading from the front panal controller
        while (!player.readyForData()) {yield();}
-//    player.setVolume(30,30);  // Higher is quieter.
+    player.setVolume(60,60);  // Higher is quieter.
 //    player.dumpRegs();
-      adjustVolume(); 
+    //adjustVolume();
 
     // Connect to the WIFI access point
     // TODO  need to refactor so that a connection can be
@@ -286,7 +286,6 @@ void loop() {
       }
       if (ringBuffer.availableSpace() == 0)  {
           bufferInitialized = true;
-          USE_SERIAL.println("Buffer initialised");
       }
     }
 
@@ -313,30 +312,39 @@ void loop() {
     }
   }
 
-  // Test of the tone control
-  //TODO  The minibox has no tone control. Find a default that sounds best.
+  // Read the front panel controller to ascertain the state of the controls.
   if (bufferInitialized && checkControlStatus == 1) {
     checkControlStatus = 0;
-    if (toneControl == -15) toneControl = 15;
-    else toneControl = toneControl -1;
-    USE_SERIAL.println(toneControl);
-    player.setTone(toneControl);
 
-    unsigned int changes = getChanges();  
-    if (changes &  1 << CHANGED_VOL_BIT) {
-      adjustVolume();
-    }
-    if (changes &  1 << CHANGED_STATION_BIT) {
-      // TODO Change station. 
-    }
-    
+    //player.setTone(toneControl);
+
+//    unsigned int changes = getChanges();
+//    if (changes &  (1 << CHANGED_VOL_BIT)) {
+//      adjustVolume();
+//    }
+//    if (changes &  (1 << CHANGED_STATION_BIT)) {
+//      // TODO Change station.
+//    }
+
+    //adjustVolume();   // DOES NOT WORK!but used to
+    // player.setVolume(50,50);
 
 
   }
 
+//  THIS DOES NOT WORK _ MESSES UP THE SOUND!
+//  loopCount++;
+//  if (loopCount == 6000) {
+//      digitalWrite(FPCS, LOW);
+//  }
+//  if (loopCount == (6000 + 600)) {
+//    digitalWrite(FPCS, HIGH);
+//    loopCount = 0;
+//  }
+
 
   // Skip a transfer to the VS1053 to give the buffer a chance to reload if
-  //  the data amout has fallen below THRESHOLD
+  //  the data amount has fallen below THRESHOLD
   skip = ((bufferInitialized && (ringBuffer.availableData() < THRESHOLD)) ? (skip++)%2 : 0);
 
   // Moving data to VS1053
@@ -434,22 +442,22 @@ void handleOtherCode(int httpCode) {
 
 }
 
-/* Read the URL of the station that the readi is currently tuned into
+/* Read the URL of the station that the radio is currently tuned into
  *
  * NOTE: This is a dummy function to be replaced with a an SPI read of the station URL.
  */
 String getStationURL()
 {
-   return stations[1];  // RPR 80s
+   return stations[0];  // RPR1
 
 }
 
-// Get the volument from the front panal controller 
+// Get the volument from the front panal controller
 // and adjust it on the player.
 void adjustVolume() {
     unsigned int volume = getVolume();
     int playerVol = map(volume, 1, 31, 200, 0);
-    
+
     player.setVolume(playerVol,playerVol);
 }
 
