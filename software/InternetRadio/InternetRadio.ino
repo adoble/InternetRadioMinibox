@@ -133,7 +133,7 @@ int bufferIndex = 0;
 // The url of the station currently playing
 String currentStation;
 
-// number of byte availble in the read stream
+// Number of bytes availble in the read stream
 size_t nBytes;
 
 // Pointer to the payload stream, i.e. the MP3 data from the internet station.
@@ -452,7 +452,7 @@ String getStationURL()
 
 }
 
-// Get the volument from the front panal controller
+// Get the volume from the front panel controller
 // and adjust it on the player.
 void adjustVolume() {
     unsigned int volume = getVolume();
@@ -478,7 +478,7 @@ unsigned int getVolume() {
   return volume;
 }
 
-// Get the change status from the front panal controller
+// Get the change status from the front panel controller
 unsigned int getChanges() {
   unsigned int changes;
 
