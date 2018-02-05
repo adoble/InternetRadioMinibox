@@ -42,45 +42,58 @@
 #include <SPI.h>
 #include "Lemon_VS1053.h"
 #include "SPIRingBuffer.h"
+#include "VirtualPinEmulation.h"
 #include "credentials.h"
 
-const char programName[] = "InternetRadioV16";
+const char programName[] = "INTEGRATION_2_VERSION ";
 
 // Front panel controller instruction codes
 // TODO move these into a header file
-const byte INST_NULL = 0x00;
-const byte INST_GET_STATION = 0x01;
-const byte INST_GET_VOL = 0x02;
-const byte INST_STATUS_OK = 0x03;
-const byte INST_STATUS_ERROR = 0x04;
-const byte INST_GET_CHANGES  = 0x05;
+const byte INST_NULL           = 0x00;
+const byte INST_GET_STATION   = 0x01;
+const byte INST_GET_VOL       = 0x02;
+const byte INST_STATUS_OK     = 0x03;
+const byte INST_STATUS_ERROR  = 0x04;
+const byte INST_GET_CHANGES   = 0x05;
 const byte INST_RESET_CHANGES = 0x06;
+const byte INST_EXPANDED_PIN  = 0x07;
+
 
 // Changed status bits
 const byte CHANGED_VOL_BIT     = 0;     // The volume has changed
 const byte CHANGED_STATION_BIT = 1;     // A new station has been selected
+
+// Values for the instruction INST_EXPANDED_PIN.
+const byte EXP_PIN_1 = 1;  // Mapped to SPI_XCS
+const byte EXP_PIN_2 = 2;  // Mapped to SPI_RAM_CS
 
 
 #define USE_SERIAL Serial
 
 // Pin setup for the VS1053
 const int DREQ = 5;
-const int XCS = 4;
 const int XRST = 2;
 const int XDCS = 16;
+// Pin setup for the AVR chip used as front panel controller
+const int FPCS = 4;
+const int FP_CHANGE_INTR= 15;  // Interrupt signalling pin that the
+                              // Front Panel controller has detected a change
+
+
+// const int XCS = 4; -->  virtual pin
+VirtualPinEmulation xcsVirtualPin = VirtualPinEmulation(FPCS, EXP_PIN_1); //i.e. calling write() will change pin A= on the FP controller
 
 // Pin setup for the 23K256 RAM
-const int RAMCS = 15;     // Chip select for the external rRAM used for the ring buffer
-
-// Pin setup for the AVR chip used as front panel controller
-const int FPCS = 0;
-
+// const int RAMCS = 15;     // Chip select for the external rRAM used for the ring buffer
+VirtualPinEmulation ramCSVirtualPin = VirtualPinEmulation(FPCS, EXP_PIN_2);
 
 // Setup the VS1053 Lemon player using standard hardware SPI pins
-Lemon_VS1053 player = Lemon_VS1053(XRST, XCS, XDCS, DREQ);
+//Lemon_VS1053 player = Lemon_VS1053(XRST, XCS, XDCS, DREQ);
+Lemon_VS1053 player = Lemon_VS1053(XRST, xcsVirtualPin, XDCS, DREQ);
 
 // Set up the external RAM as a ring buffer
-SPIRingBuffer ringBuffer(RAMCS);
+//SPIRingBuffer ringBuffer(RAMCS);
+SPIRingBuffer ringBuffer(ramCSVirtualPin);
 
 // Flag to ensure that the ring buffer is fully loaded on startup
 bool bufferInitialized = false;
@@ -133,7 +146,7 @@ int bufferIndex = 0;
 // The url of the station currently playing
 String currentStation;
 
-// Number of bytes availble in the read stream
+// Number of bytes available in the read stream
 size_t nBytes;
 
 // Pointer to the payload stream, i.e. the MP3 data from the internet station.
@@ -146,12 +159,10 @@ void handleOtherCode(int);
 String getStationURL();
 
 
-void inline timerHandler (void){
+/* Interrupt function for a change in the volume of the station
+*/
+void changeISR() {
   checkControlStatus = 1;
-  //timer0_write(ESP.getCycleCount() + 41660000); // Period 470 mS
-  timer0_write(ESP.getCycleCount() + 20830000); // Period 235 mS
-
-
 }
 
 void setup() {
@@ -167,23 +178,18 @@ void setup() {
 
   // Before initialising using the libraries  make sure that the CS pins are
   // in the right state
-  pinMode(XCS, OUTPUT);
-  digitalWrite(XCS, HIGH);
-  pinMode(XDCS, OUTPUT);
-  digitalWrite(XDCS, HIGH);
-  pinMode(RAMCS, OUTPUT);
-  digitalWrite(RAMCS, HIGH);
+  //pinMode(XCS, OUTPUT);
+  //digitalWrite(XCS, HIGH);
+  //pinMode(XDCS, OUTPUT);
+  //digitalWrite(XDCS, HIGH);
+  //pinMode(RAMCS, OUTPUT);
+  //digitalWrite(RAMCS, HIGH);
+  xcsVirtualPin.begin();
+  ramCSVirtualPin.begin();
+
   pinMode(FPCS, OUTPUT);
   digitalWrite(FPCS, HIGH);
   delay(1);
-
-  // Set up the timer interupt
-//  noInterrupts();
-//  timer0_isr_init();
-//  timer0_attachInterrupt(timerHandler);
-//  timer0_write(ESP.getCycleCount() + 41660000);
-//  interrupts();
-
 
   // Initialise the ring buffer
   ringBuffer.begin();   //TODO is the buffer too long, resulting in too long a delay?
@@ -202,10 +208,14 @@ void setup() {
     player.setMP3Mode();
 
     // Set the initial volume by reading from the front panal controller
-       while (!player.readyForData()) {yield();}
+    while (!player.readyForData()) {yield();}
     player.setVolume(60,60);  // Higher is quieter.
+    adjustVolume();
+
+    // Setup the interrupt for changes to the controls
+    attachInterrupt(digitalPinToInterrupt(FP_CHANGE_INTR), changeISR, LOW);
+
 //    player.dumpRegs();
-    //adjustVolume();
 
     // Connect to the WIFI access point
     // TODO  need to refactor so that a connection can be
@@ -316,32 +326,21 @@ void loop() {
   if (bufferInitialized && checkControlStatus == 1) {
     checkControlStatus = 0;
 
-    //player.setTone(toneControl);
+    //player.setTone(toneControl);  // TODO experiment with the best tone setting and place in setup()
 
-//    unsigned int changes = getChanges();
-//    if (changes &  (1 << CHANGED_VOL_BIT)) {
-//      adjustVolume();
-//    }
-//    if (changes &  (1 << CHANGED_STATION_BIT)) {
-//      // TODO Change station.
-//    }
+    unsigned int changes = getChanges();
+    if (changes &  (1 << CHANGED_VOL_BIT)) {
+      adjustVolume();
+    }
+    if (changes &  (1 << CHANGED_STATION_BIT)) {
+      // TODO Change station.
+    }
 
     //adjustVolume();   // DOES NOT WORK!but used to
     // player.setVolume(50,50);
 
 
   }
-
-//  THIS DOES NOT WORK _ MESSES UP THE SOUND!
-//  loopCount++;
-//  if (loopCount == 6000) {
-//      digitalWrite(FPCS, LOW);
-//  }
-//  if (loopCount == (6000 + 600)) {
-//    digitalWrite(FPCS, HIGH);
-//    loopCount = 0;
-//  }
-
 
   // Skip a transfer to the VS1053 to give the buffer a chance to reload if
   //  the data amount has fallen below THRESHOLD

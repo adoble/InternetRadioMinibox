@@ -73,6 +73,20 @@ Lemon_VS1053::Lemon_VS1053(int8_t rst, int8_t cs, int8_t dcs, int8_t dreq) {
   _cs = cs;
   _dcs = dcs;
   _dreq = dreq;
+
+  _virtualChipSelect = new VirtualPin(_cs);  // Use the default chip select, i.e. the specified pin
+}
+
+Lemon_VS1053::Lemon_VS1053(int8_t rst, VirtualPin virtualCS, int8_t dcs, int8_t dreq) {
+  _mosi = 0;
+  _miso = 0;
+  _clk = 0;
+  useHardwareSPI = true;
+  _reset = rst;
+  _dcs = dcs;
+  _dreq = dreq;
+
+  _virtualChipSelect = &virtualCS;
 }
 
 
@@ -169,7 +183,7 @@ void Lemon_VS1053::setTone(int tone) {
     sci_bass_value |= bass;
     sci_bass_value <<= 4;
     sci_bass_value |= 0xA;  // Bass boot under 100 Hz
-    
+
 
    // Send the SCI command
    noInterrupts(); //cli();
@@ -200,7 +214,9 @@ void Lemon_VS1053::reset() {
     delay(100);
     digitalWrite(_reset, HIGH);
   }
-  digitalWrite(_cs, HIGH);
+  //digitalWrite(_cs, HIGH);
+  _virtualChipSelect->write(HIGH);
+
   digitalWrite(_dcs, HIGH);
   delay(100);
   softReset();
@@ -218,8 +234,10 @@ uint8_t Lemon_VS1053::begin(void) {
     digitalWrite(_reset, LOW);
   }
 
-  pinMode(_cs, OUTPUT);
-  digitalWrite(_cs, HIGH);
+  _virtualChipSelect->begin();
+  //digitalWrite(_cs, HIGH);
+  _virtualChipSelect->write(HIGH);
+
   pinMode(_dcs, OUTPUT);
   digitalWrite(_dcs, HIGH);
   pinMode(_dreq, INPUT);
@@ -324,14 +342,16 @@ uint16_t Lemon_VS1053::sciRead(uint8_t addr) {
   #ifdef SPI_HAS_TRANSACTION
   if (useHardwareSPI) SPI.beginTransaction(VS1053_CONTROL_SPI_SETTING);
   #endif
-  digitalWrite(_cs, LOW);
+  //digitalWrite(_cs, LOW);
+  _virtualChipSelect->write(LOW);
   spiwrite(VS1053_SCI_READ);
   spiwrite(addr);
   delayMicroseconds(10);
   data = spiread();
   data <<= 8;
   data |= spiread();
-  digitalWrite(_cs, HIGH);
+  //digitalWrite(_cs, HIGH);
+  _virtualChipSelect->write(HIGH);
   #ifdef SPI_HAS_TRANSACTION
   if (useHardwareSPI) SPI.endTransaction();
   #endif
@@ -344,12 +364,14 @@ void Lemon_VS1053::sciWrite(uint8_t addr, uint16_t data) {
   #ifdef SPI_HAS_TRANSACTION
   if (useHardwareSPI) SPI.beginTransaction(VS1053_CONTROL_SPI_SETTING);
   #endif
-  digitalWrite(_cs, LOW);
+  //digitalWrite(_cs, LOW);
+  _virtualChipSelect->write(LOW);
   spiwrite(VS1053_SCI_WRITE);
   spiwrite(addr);
   spiwrite(data >> 8);
   spiwrite(data & 0xFF);
-  digitalWrite(_cs, HIGH);
+  //digitalWrite(_cs, HIGH);
+  _virtualChipSelect->write(HIGH);
   #ifdef SPI_HAS_TRANSACTION
   if (useHardwareSPI) SPI.endTransaction();
   #endif

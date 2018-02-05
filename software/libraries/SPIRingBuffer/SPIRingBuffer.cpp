@@ -14,7 +14,19 @@
  */
 SPIRingBuffer::SPIRingBuffer(uint8_t chipSelectPin)
 {
-  csPin = chipSelectPin;
+  //csPin = chipSelectPin;
+  _virtualChipSelect = new VirtualPin(chipSelectPin);
+  operationMode = 0xFF;   // TODO need it?
+}
+
+/**
+ * Class constructor with expanded pin
+ *
+ * param virtualChipSelect The virtual expanded pin used
+ *                         to drive the SPI slave select
+ */
+SPIRingBuffer::SPIRingBuffer(VirtualPin virtualChipSelect) {
+  _virtualChipSelect = &virtualChipSelect;
   operationMode = 0xFF;   // TODO need it?
 }
 
@@ -25,7 +37,8 @@ SPIRingBuffer::SPIRingBuffer(uint8_t chipSelectPin)
  */
  void SPIRingBuffer::begin(void)
  {
-   pinMode(csPin, OUTPUT);
+   //pinMode(csPin, OUTPUT);
+   _virtualChipSelect->mode(OUTPUT);
    chipSelect(false);
 
    //spi.setFrequency(RAMCLK);
@@ -241,3 +254,14 @@ void SPIRingBuffer::writeByte(unsigned int address, char data)
 
   //SPI.endTransaction();
 }
+
+/**
+ * Enable chip via CS pin
+ *
+ * @param state True to select. False to unselect
+ */
+ void  SPIRingBuffer::chipSelect(bool state)
+ {
+   //digitalWrite(csPin, !state);
+   _virtualChipSelect->write(!state);
+ }

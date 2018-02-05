@@ -31,6 +31,7 @@
 
 #include <SPI.h>
 
+#include "VirtualPin.h"
 
 #ifdef __SAM3X8E__
 typedef volatile RwReg PortReg;
@@ -90,9 +91,15 @@ typedef uint8_t PortMask;
 
 class Lemon_VS1053 {
  public:
-  Lemon_VS1053(int8_t mosi, int8_t miso, int8_t clk,
-		  int8_t rst, int8_t cs, int8_t dcs, int8_t dreq);
+  //Lemon_VS1053(int8_t mosi, int8_t miso, int8_t clk,
+	//	  int8_t rst, int8_t cs, int8_t dcs, int8_t dreq);
+  // Contructor to define pins used
   Lemon_VS1053(int8_t rst, int8_t cs, int8_t dcs, int8_t dreq);
+
+  // Contructor using an expanded pin for chip select
+  Lemon_VS1053(int8_t rst, VirtualPin virtualCS, int8_t dcs, int8_t dreq);
+
+
   uint8_t begin(void);
   void reset(void);
   void softReset(void);
@@ -104,7 +111,7 @@ class Lemon_VS1053 {
 
   uint16_t decodeTime(void);
   void setVolume(uint8_t left, uint8_t right);
-  void setTone(int tone); 
+  void setTone(int tone);
   void dumpRegs(void);
 
   void playData(uint8_t *buffer, uint8_t buffsiz);
@@ -127,6 +134,8 @@ class Lemon_VS1053 {
  private:
   int8_t _mosi, _miso, _clk, _reset, _cs, _dcs;
   boolean useHardwareSPI;
+  VirtualPin* _virtualChipSelect;
+
 };
 
 

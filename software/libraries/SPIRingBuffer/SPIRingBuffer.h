@@ -15,6 +15,7 @@
 #include <Arduino.h>
 #include <SPI.h>
 
+#include "VirtualPin.h"  
 
 // SRAM instructions
 #define RDSR  0x05
@@ -38,8 +39,8 @@ class SPIRingBuffer
 {
   private:
     // Chip select pin
-    uint8_t csPin;
-
+    //uint8_t csPin;
+    VirtualPin* _virtualChipSelect;
     // SPI interface
     SPIClass spi;
 
@@ -56,10 +57,7 @@ class SPIRingBuffer
      *
      * @param state True to select. False to unselect
      */
-     void inline chipSelect(bool state)
-     {
-       digitalWrite(csPin, !state);
-     }
+     void chipSelect(bool state);
 
     /**
      * Set operation mode
@@ -67,6 +65,7 @@ class SPIRingBuffer
      * @param mode Operation mode
      */
     void setMode(char mode);
+
   public:
 
     // The length of the ring buffer (in bytes) is the size of the SPI RAM, i.e. 256Kbit = 32KByte
@@ -78,6 +77,14 @@ class SPIRingBuffer
      * param chipSelectPin The digital pin used a SPI slave select
      */
     SPIRingBuffer(uint8_t chipSelectPin);
+
+    /**
+     * Class constructor with expanded pin
+     *
+     * param virtualChipSelect The virtual expanded pin used
+     *                         to drive the SPI slave select
+     */
+    SPIRingBuffer(VirtualPin virtualChipSelect);
 
 
     /**
