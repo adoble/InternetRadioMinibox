@@ -20,14 +20,22 @@
   *                                     Once read the FPController sets ALL bits back to zero.
   *  INST_RESET_CHANGES        0x06     Resets the change bits. This should be used after ALL changes have
   *                                     been processed.
-  *  INST_EXPANDED_PIN         0x07     Drives the specified expanded pin used for SPI chip select pin low.
-  *                                     If the specified pin is 0 then drives them all high.
+  *  INST_VIRTUAL_PIN         0x07      Drives the specified virtual pin used for SPI chip select pin low.
+  *                                     See "Values taken by INST_VIRTUAL_PIN".
   *
   *  Change Status Bits (from INST_GET_CHANGES)
   *  Bit Name                 Code      Description
   *  ==================       =======   ===============================================================
   *  CHANGED_VOL              0x01      The volume has changed
   *  CHANGED_STATION          0x02      A new station has been selected
+  *
+  *  Values taken by INST_VIRTUAL_PIN
+  *  Bit           Value           Description
+  *  =======       =============   ===============================================================
+  *  7             1               If the specified virtual pin should be driven HIGH.
+  *                0               If the specified virtual pin should be driven LOW
+  *  0-6           Virtual pin     This has a range from 1 - 63
+  *  Note: If this byte is 0 then this is acts as a reset.
   */
 
 #include <SPI.h>
@@ -50,13 +58,13 @@ const byte INST_STATUS_OK         = 0x03;
 const byte INST_STATUS_ERROR      = 0x04;
 const byte INST_GET_CHANGES       = 0x05;
 const byte INST_RESET_CHANGES     = 0x06;
-const byte INST_EXPANDED_PIN      = 0x07;
+const byte INST_VIRTUAL_PIN      = 0x07;
 
 // Changed status bits
 const byte CHANGED_VOL_BIT     = 0;     // The volume has changed
 const byte CHANGED_STATION_BIT = 1;     // A new station has been selected
 
-// Values for the instruction INST_EXPANDED_PIN.
+// Values for the instruction INST_VIRTUAL_PIN.
 const byte EXP_PIN_1 = 1;  // Mapped to SPI_XCS
 const byte EXP_PIN_2 = 2;  // Mapped to SPI_RAM_CS
 
@@ -76,7 +84,7 @@ int instructionTypes[] = {
                               WRITE,        // INST_STATUS_ERROR = 0x04
                               READ,         // INST_GET_CHANGES  = 0x05
                               NO_TRANSFER,  // INST_RESET_CHANGES = 0x06
-                              WRITE         // INST_EXPANDED_PIN = 0x07;
+                              WRITE         // INST_VIRTUAL_PIN = 0x07;
                           };
 
 
@@ -167,6 +175,8 @@ const int  ENCODER_POS_ADDR = 1;    // The address used to store the last encode
 
 int station;
 int oldStation = -1;
+
+byte expandedOutputPin;
 
 void setup (void)
 {
@@ -310,7 +320,7 @@ void loop()
 {
 
   int lowest, highest;   // Range of noisy measurements of the variable cap.
-
+Serial.print("INST:"); Serial.println(instruction, OCT);
    if (processInstruction)
     {
       if (instruction == INST_NULL) {
@@ -327,24 +337,26 @@ void loop()
         errorCode = transferBuffer[INST_STATUS_ERROR];
         Serial.print("Error code rcx:"); Serial.println(errorCode);
       }
-      else if (instruction == INST_EXPANDED_PIN) {
-        expandedOutputPin = transferBuffer[INST_EXPANDED_PIN];
-        // Map to the actual pins. With just 2 pins just hardcode this.
-        if (expandedOutputPin  ==  EXP_PIN_1) {
-          digitalWrite(SPI_XCS, LOW);
-        if (expandedOutputPin  ==  EXP_PIN_2) {
-            digitalWrite(SPI_RAM_CS, LOW);
-        } else
-          errorCode = ERROR_INVALID_INSTRUCTION;
+      else if (instruction == INST_VIRTUAL_PIN) {
+        expandedOutputPin = transferBuffer[INST_VIRTUAL_PIN] & 0x177;
+        // Map to the actual pins. Only 2 pins so just hardcode it.
+        int expandedPinValue = (transferBuffer[INST_VIRTUAL_PIN] >> 7) ? HIGH : LOW;
+
+        Serial.print("expandedOutputPin ");
+        Serial.print(expandedOutputPin);
+        Serial.print(" = ");
+        Serial.println(expandedPinValue, OCT);
+        
+        if (expandedOutputPin ==  EXP_PIN_1) digitalWrite(SPI_XCS, expandedPinValue);
+        if (expandedOutputPin ==  EXP_PIN_2) digitalWrite(SPI_RAM_CS, expandedPinValue);
+        if (expandedOutputPin == 0) {
+          // Reset. Formally this should happen when  the value is zero,
+          // but extend this for any other value.
+          digitalWrite(SPI_XCS, HIGH);
+          digitalWrite(SPI_RAM_CS, HIGH);;
         }
       }
-      else if (instruction == INST_EXPANDED_RST) {
-        digitalWrite(SPI_XCS, HIGH);
-        digitalWrite(SPI_RAM_CS, HIGH);
-      }
-      else {
-        errorCode = ERROR_INVALID_INSTRUCTION;
-      }
+
     processInstruction= false;
     }  // end of process instruction
 
