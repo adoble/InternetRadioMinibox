@@ -46,6 +46,21 @@
 
 const char programName[] = "InternetRadioV16";
 
+// Front panel controller instruction codes
+// TODO move these into a header file
+const byte INST_NULL = 0x00;
+const byte INST_GET_STATION = 0x01;
+const byte INST_GET_VOL = 0x02;
+const byte INST_STATUS_OK = 0x03;
+const byte INST_STATUS_ERROR = 0x04;
+const byte INST_GET_CHANGES  = 0x05;
+const byte INST_RESET_CHANGES = 0x06;
+
+// Changed status bits
+const byte CHANGED_VOL_BIT     = 0;     // The volume has changed
+const byte CHANGED_STATION_BIT = 1;     // A new station has been selected
+
+
 #define USE_SERIAL Serial
 
 // Pin setup for the VS1053
@@ -57,6 +72,10 @@ const int XDCS = 16;
 // Pin setup for the 23K256 RAM
 const int RAMCS = 15;     // Chip select for the external rRAM used for the ring buffer
 
+// Pin setup for the AVR chip used as front panel controller
+const int FPCS = 0;
+
+
 // Setup the VS1053 Lemon player using standard hardware SPI pins
 Lemon_VS1053 player = Lemon_VS1053(XRST, XCS, XDCS, DREQ);
 
@@ -66,13 +85,15 @@ SPIRingBuffer ringBuffer(RAMCS);
 // Flag to ensure that the ring buffer is fully loaded on startup
 bool bufferInitialized = false;
 
-// The threshold at which the buffer will be loaded at a faster rate (i.e. to cacth up).
+// The threshold at which the buffer will be loaded at a faster rate (i.e. to catch up).
 const int THRESHOLD = ringBuffer.RING_BUFFER_LENGTH / 5;   // 20%
 
 // The skip flag to allow the buffer to catch up
 int skip = 0;
 
 volatile int checkControlStatus = 0;
+
+int loopCount = 0;
 
 // Setup the WIFI objects
 ESP8266WiFiMulti WiFiMulti;
@@ -82,16 +103,26 @@ HTTPClient http;
 const char* ssid     = WIFI_SSID;
 const char* password = WIFI_PWD;
 
-// URL of radio staion to access.
+// URL of radio staion to access. Uncomment what is wanted.
 // TODO replace this with code so that it can be configured by the user
-//String station= "http://rpr1.fmstreams.de/stream1";   // RPR1   64kps
-String station= "http://217.151.151.90:80/rpr-80er-128-mp3";   // RPR1   128kps
-//String station= "http://rpr1.fmstreams.de/rpr-80er-128-mp3";   // RPR1 Best of the 80s - 128kbs
-//String station= "http://swr-mp3-m-swr3.akacast.akamaistream.net/7/720/137136/v1/gnl.akacast.akamaistream.net/swr-mp3-m-swr3";   // SWR3 - 128kbs
+const int NUMBER_STATIONS = 10;
+//String station= "http://rpr1.fmstreams.de/stream1";   // RPR1   64kps  OBSOLEATE
+String stations[NUMBER_STATIONS] = {
+  //"http://217.151.151.90:80/rpr-80er-128-mp3", // RPR1 Best of the 80s - 128kbs
+  "http://streams.rpr1.de/rpr-kaiserslautern-128-mp3",
+  "http://streams.rp1.de/rpr-80er-128-mp3", // RPR1 Best of the 80s - 128kbs
+  "http://swr-swr3-live.cast.addradio.de/swr/swr3/live/mp3/128/stream.mp3", // SWR3 - 128kps
+  "http://bbcmedia.ic.llnwd.net/stream/bbcmedia_radio1_mf_p?s=1484901640&e=1484916040&h=0f66aa9663a84ce5183be725ec127cad",  // BBC1
+  "http://bbcmedia.ic.llnwd.net/stream/bbcmedia_radio2_mf_p?s=1484901608&e=1484916008&h=1c6ffbe262747262e4c6267fd2f54bc1",  // BBC2
+  "http://listen.181fm.com/181-classical_128k.mp3",  // Classical
+  "http://mp3channels.webradio.antenne.de/antenne",   // Antenne
+  "http://chai5she.cdn.dvmr.fr:80/fip-webradio1.mp3",  // FIP autour du rock
+  "http://wdr-wdr3-live.icecast.wdr.de/wdr/wdr3/live/mp3/128/stream.mp3",  // WDR 3
+  "http://185.52.127.157/de/33001/mp3_128.mp3"  // NRJ Berlin
+  };
 
+  //NOTE for RPR1 Stations see http://streams.rpr1.de/
 
-//String station = "http://www.andrew-doble.homepage.t-online.de/";  //TEST
-//String station = "http://ledjamradio.ice.infomaniak.ch/ledjamradio.mp3";
 
 // Create a buffer to read in the mp3 data. Set to DATABUFFERLEN as this
 // is the amount that can be transfered to the VS1053 in one SPI operation.
@@ -102,26 +133,25 @@ int bufferIndex = 0;
 // The url of the station currently playing
 String currentStation;
 
-// number of byte availble in the read stream
+// Number of bytes availble in the read stream
 size_t nBytes;
 
 // Pointer to the payload stream, i.e. the MP3 data from the internet station.
 WiFiClient * stream;
 
-// Default setting for the tone control
-// TODO the minbox does not have a tone control.
-// TODO Before removing see what default setting sounds best.
-int toneControl = 0;
-
-
 // Function prototypes
+void connectWLAN(const char*, const char*);
 void handleRedirect();
 void handleOtherCode(int);
 String getStationURL();
 
-void inline handler (void){
+
+void inline timerHandler (void){
   checkControlStatus = 1;
-  timer0_write(ESP.getCycleCount() + 41660000);
+  //timer0_write(ESP.getCycleCount() + 41660000); // Period 470 mS
+  timer0_write(ESP.getCycleCount() + 20830000); // Period 235 mS
+
+
 }
 
 void setup() {
@@ -143,18 +173,20 @@ void setup() {
   digitalWrite(XDCS, HIGH);
   pinMode(RAMCS, OUTPUT);
   digitalWrite(RAMCS, HIGH);
+  pinMode(FPCS, OUTPUT);
+  digitalWrite(FPCS, HIGH);
   delay(1);
 
   // Set up the timer interupt
-  noInterrupts();
-  timer0_isr_init();
-  timer0_attachInterrupt(handler);
-  timer0_write(ESP.getCycleCount() + 41660000);
-  interrupts();
+//  noInterrupts();
+//  timer0_isr_init();
+//  timer0_attachInterrupt(timerHandler);
+//  timer0_write(ESP.getCycleCount() + 41660000);
+//  interrupts();
 
 
   // Initialise the ring buffer
-  ringBuffer.begin();
+  ringBuffer.begin();   //TODO is the buffer too long, resulting in too long a delay?
 
 
   // Initialize the player
@@ -169,26 +201,19 @@ void setup() {
     while (!player.readyForData()) {yield();}
     player.setMP3Mode();
 
-    // Set the volume
-    while (!player.readyForData()) {yield();}
-    player.setVolume(30,30);  // Higher is quieter.
-    player.dumpRegs();
+    // Set the initial volume by reading from the front panal controller
+       while (!player.readyForData()) {yield();}
+    player.setVolume(60,60);  // Higher is quieter.
+//    player.dumpRegs();
+    //adjustVolume();
 
     // Connect to the WIFI access point
     // TODO  need to refactor so that a connection can be
     // reestablished after being lost
-    Serial.println("Attempting to connect to WIFI AP");
+    Serial.print("Attempting to connect to WIFI AP ");
+    Serial.println(ssid);
 
-    WiFiMulti.addAP(ssid, password);  // Only adding ONE access point
-    // wait for WiFi connection
-    while((WiFiMulti.run() != WL_CONNECTED)) {
-      USE_SERIAL.print(".");
-      yield();
-      delay(10);
-    }
-    USE_SERIAL.println();
-    USE_SERIAL.println("Connected to WIFI AP");
-
+    connectWLAN(ssid, password);
 
       // Get the station
       currentStation =  getStationURL();
@@ -240,8 +265,6 @@ void loop() {
   int nRead = 0;
   int maxBytesToRead;
 
-
-
   if (!bufferInitialized) {
     // Load up the buffer
     nBytes = stream->available();
@@ -263,7 +286,6 @@ void loop() {
       }
       if (ringBuffer.availableSpace() == 0)  {
           bufferInitialized = true;
-          USE_SERIAL.println("Buffer initialised");
       }
     }
 
@@ -290,19 +312,39 @@ void loop() {
     }
   }
 
-  // Test of the tone control
-  //TODO  The minibox has no tone control. Find a default that sounds best.
+  // Read the front panel controller to ascertain the state of the controls.
   if (bufferInitialized && checkControlStatus == 1) {
     checkControlStatus = 0;
-    if (toneControl == -15) toneControl = 15;
-    else toneControl = toneControl -1;
-    USE_SERIAL.println(toneControl);
-    player.setTone(toneControl);
+
+    //player.setTone(toneControl);
+
+//    unsigned int changes = getChanges();
+//    if (changes &  (1 << CHANGED_VOL_BIT)) {
+//      adjustVolume();
+//    }
+//    if (changes &  (1 << CHANGED_STATION_BIT)) {
+//      // TODO Change station.
+//    }
+
+    //adjustVolume();   // DOES NOT WORK!but used to
+    // player.setVolume(50,50);
+
+
   }
+
+//  THIS DOES NOT WORK _ MESSES UP THE SOUND!
+//  loopCount++;
+//  if (loopCount == 6000) {
+//      digitalWrite(FPCS, LOW);
+//  }
+//  if (loopCount == (6000 + 600)) {
+//    digitalWrite(FPCS, HIGH);
+//    loopCount = 0;
+//  }
 
 
   // Skip a transfer to the VS1053 to give the buffer a chance to reload if
-  //  the data amout has fallen below THRESHOLD
+  //  the data amount has fallen below THRESHOLD
   skip = ((bufferInitialized && (ringBuffer.availableData() < THRESHOLD)) ? (skip++)%2 : 0);
 
   // Moving data to VS1053
@@ -329,6 +371,22 @@ void loop() {
 
 }
 
+/* Connect to the wireless LAN */
+void connectWLAN(const char* ssid, const char* password) {
+
+   WiFi.mode(WIFI_STA);
+   WiFi.begin(ssid, password);
+   while((WiFi.status() != WL_CONNECTED)) {
+     yield();
+     delay(500);
+     USE_SERIAL.print(".");
+   }
+   USE_SERIAL.println();
+   USE_SERIAL.println("Connected to WIFI AP");
+   USE_SERIAL.print("IP Address: ");
+   USE_SERIAL.println(WiFi.localIP());
+
+}
 
 
 /*
@@ -384,16 +442,56 @@ void handleOtherCode(int httpCode) {
 
 }
 
-/* Read the URL of the station that the readi is currently tuned into
+/* Read the URL of the station that the radio is currently tuned into
  *
  * NOTE: This is a dummy function to be replaced with a an SPI read of the station URL.
  */
 String getStationURL()
 {
-   return station;
+   return stations[0];  // RPR1
 
 }
 
+// Get the volume from the front panel controller
+// and adjust it on the player.
+void adjustVolume() {
+    unsigned int volume = getVolume();
+    int playerVol = map(volume, 1, 31, 200, 0);
+
+    player.setVolume(playerVol,playerVol);
+}
+
+/*
+ * Get the volume set from the front panel controller.
+ */
+unsigned int getVolume() {
+  unsigned int volume;
+
+  digitalWrite(FPCS, LOW);
+  SPI.transfer(INST_GET_VOL);
+  delayMicroseconds(20);   //Wait for the instruction to be processed by the slave.
+
+  // Transfer byte) from the slave and pack it into an unsigned int
+  volume  = SPI.transfer(0x00);
+  digitalWrite(FPCS, HIGH);
+
+  return volume;
+}
+
+// Get the change status from the front panel controller
+unsigned int getChanges() {
+  unsigned int changes;
+
+  digitalWrite(FPCS, LOW);
+  SPI.transfer(INST_GET_CHANGES);
+  delayMicroseconds(20);   //Wait for the instruction to be processed by the slave.
+
+  // Transfer byte) from the slave and pack it into an unsigned int
+  changes = SPI.transfer(0x00);
+  digitalWrite(FPCS, HIGH);
+
+  return changes;
+}
 
 
 // Set the VS1053 chip into MP3 mode
