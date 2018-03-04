@@ -11,12 +11,6 @@
 
 #include "VirtualPin.h"
 
-// class IDemo
-// {
-//     public:
-//         virtual ~IDemo() {}
-//         virtual void OverrideMe() = 0;
-// };
 
 class VirtualPinDecoder : public VirtualPin
 {

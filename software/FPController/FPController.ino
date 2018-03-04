@@ -346,7 +346,7 @@ Serial.print("INST:"); Serial.println(instruction, OCT);
         Serial.print(expandedOutputPin);
         Serial.print(" = ");
         Serial.println(expandedPinValue, OCT);
-        
+
         if (expandedOutputPin ==  EXP_PIN_1) digitalWrite(SPI_XCS, expandedPinValue);
         if (expandedOutputPin ==  EXP_PIN_2) digitalWrite(SPI_RAM_CS, expandedPinValue);
         if (expandedOutputPin == 0) {
@@ -409,12 +409,10 @@ Serial.print("INST:"); Serial.println(instruction, OCT);
    pinMode(STATION_TUNING_IN_PIN, OUTPUT);
 
    // If a change has occured then pulse the front panel interrupt signal
-   // to indicate that a change has talen replace
-   // Now pulse the front panel interrupt signal
-   // to indicate that a change has talen replace
+   // to indicate that a change has happened
    if (transferBuffer[INST_GET_CHANGES] & (1<<CHANGED_VOL_BIT)) {
      digitalWrite(FP_CHANGE_INTR, LOW);
-     delayMicroseconds(10);  //TODO from literature
+     delayMicroseconds(1);  // 1 microsecond pulse, longer than 7 clock cycles
      digitalWrite(FP_CHANGE_INTR, HIGH);
    }
 

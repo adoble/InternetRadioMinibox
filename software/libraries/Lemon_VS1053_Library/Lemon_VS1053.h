@@ -93,10 +93,24 @@ class Lemon_VS1053 {
  public:
   //Lemon_VS1053(int8_t mosi, int8_t miso, int8_t clk,
 	//	  int8_t rst, int8_t cs, int8_t dcs, int8_t dreq);
-  // Contructor to define pins used
+
+  /**
+   *  Constructor to define pins used
+   *  Params:
+   *  rst  Reset
+   *  cs   Command chip select
+   *  dcs  Data chip select
+   *  dreq Request data (ie. ready for data)
+   */
   Lemon_VS1053(int8_t rst, int8_t cs, int8_t dcs, int8_t dreq);
 
-  // Contructor using an expanded pin for chip select
+ /** Constructor using an expanded pin for chip select
+  *  Params:
+  *  rst  Reset
+  *  virtualCS   Virtual pin used for Command chip select
+  *  dcs  Data chip select
+  *  dreq Request data (ie. ready for data)
+  */
   Lemon_VS1053(int8_t rst, VirtualPin virtualCS, int8_t dcs, int8_t dreq);
 
 
