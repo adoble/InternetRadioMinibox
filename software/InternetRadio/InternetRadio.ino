@@ -42,7 +42,7 @@
 #include <SPI.h>
 #include "Lemon_VS1053.h"
 #include "SPIRingBuffer.h"
-#include "VirtualPinEmulation.h"
+#include "VirtualPinDecoder.h"
 #include "credentials.h"
 
 const char programName[] = "INTEGRATION_2_VERSION ";
@@ -75,19 +75,28 @@ const int DREQ = 5;
 const int XRST = 2;
 const int XDCS = 16;
 // Pin setup for the AVR chip used as front panel controller
-const int FPCS = 4;
-const int FP_CHANGE_INTR= 15;  // Interrupt signalling pin that the
-                              // Front Panel controller has detected a change
+const int DECODE_0_PIN = 15;
+const int DECODE_1_PIN = 0;
+
+const int FP_CHANGE_INTR= 4;  // Interrupt signalling pin that the
+                              // Front Panel Controller has detected a change
 
 
+// Virtual pin set up for the VS1053 command chip select (XCS)
 // const int XCS = 4; -->  virtual pin
-VirtualPinEmulation xcsVirtualPin = VirtualPinEmulation(FPCS, EXP_PIN_1); //i.e. calling write() will change pin A= on the FP controller
+//VirtualPinEmulation xcsVirtualPin = VirtualPinEmulation(FPCS, EXP_PIN_1); //i.e. calling write() will change pin A= on the FP controller
+VirtualPinDecoder xcsVirtualPin = VirtualPinDecoder(DECODE_0_PIN, DECODE_1_PIN, LOW, HIGH);
 
-// Pin setup for the 23K256 RAM
+// Virtual in setup for the 23K256 (external rRAM used for the ring buffer) chip select
 // const int RAMCS = 15;     // Chip select for the external rRAM used for the ring buffer
-VirtualPinEmulation ramCSVirtualPin = VirtualPinEmulation(FPCS, EXP_PIN_2);
+//VirtualPinEmulation ramCSVirtualPin = VirtualPinEmulation(FPCS, EXP_PIN_2);
+VirtualPinDecoder ramCSVirtualPin = VirtualPinDecoder(DECODE_0_PIN, DECODE_1_PIN, HIGH, HIGH);
 
-// Setup the VS1053 Lemon player using standard hardware SPI pins
+// Virtual pin setup for the AVR microcontroller (front panel controller) chip select
+VirtualPinDecoder fpCSVirtualPin = VirtualPinDecoder(DECODE_0_PIN, DECODE_1_PIN, HIGH, LOW);
+
+// Setup the VS1053 Lemon player using standard hardware SPI pins and the
+// virtual pin for the command chip select (XCS)
 //Lemon_VS1053 player = Lemon_VS1053(XRST, XCS, XDCS, DREQ);
 Lemon_VS1053 player = Lemon_VS1053(XRST, xcsVirtualPin, XDCS, DREQ);
 
@@ -207,7 +216,7 @@ void setup() {
     while (!player.readyForData()) {yield();}
     player.setMP3Mode();
 
-    // Set the initial volume by reading from the front panal controller
+    // Set the initial volume by reading from the front panel controller
     while (!player.readyForData()) {yield();}
     player.setVolume(60,60);  // Higher is quieter.
     adjustVolume();
@@ -466,18 +475,20 @@ void adjustVolume() {
 unsigned int getVolume() {
   unsigned int volume;
 
-  digitalWrite(FPCS, LOW);
+  fpCSVirtualPin.write(LOW);
   SPI.transfer(INST_GET_VOL);
   delayMicroseconds(20);   //Wait for the instruction to be processed by the slave.
 
-  // Transfer byte) from the slave and pack it into an unsigned int
+  // Transfer byte from the slave and pack it into an unsigned int
   volume  = SPI.transfer(0x00);
-  digitalWrite(FPCS, HIGH);
+  fpCSVirtualPin.write(HIGH);
 
   return volume;
 }
 
-// Get the change status from the front panel controller
+/**
+ * Get the change status from the front panel controller
+ */
 unsigned int getChanges() {
   unsigned int changes;
 
