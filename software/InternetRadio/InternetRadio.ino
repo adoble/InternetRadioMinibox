@@ -56,17 +56,12 @@ const byte INST_STATUS_OK     = 0x03;
 const byte INST_STATUS_ERROR  = 0x04;
 const byte INST_GET_CHANGES   = 0x05;
 const byte INST_RESET_CHANGES = 0x06;
-const byte INST_EXPANDED_PIN  = 0x07;
+
 
 
 // Changed status bits
 const byte CHANGED_VOL_BIT     = 0;     // The volume has changed
 const byte CHANGED_STATION_BIT = 1;     // A new station has been selected
-
-// Values for the instruction INST_EXPANDED_PIN.
-const byte EXP_PIN_1 = 1;  // Mapped to SPI_XCS
-const byte EXP_PIN_2 = 2;  // Mapped to SPI_RAM_CS
-
 
 #define USE_SERIAL Serial
 
@@ -193,16 +188,21 @@ void setup() {
   //digitalWrite(XDCS, HIGH);
   //pinMode(RAMCS, OUTPUT);
   //digitalWrite(RAMCS, HIGH);
+  pinMode(DECODE_0_PIN, OUTPUT);
+  pinMode(DECODE_1_PIN, OUTPUT);
+
   xcsVirtualPin.begin();
   ramCSVirtualPin.begin();
+  fpCSVirtualPin.begin();
 
-  pinMode(FPCS, OUTPUT);
-  digitalWrite(FPCS, HIGH);
   delay(1);
+
+  Serial.println("Init ring buffer");
 
   // Initialise the ring buffer
   ringBuffer.begin();   //TODO is the buffer too long, resulting in too long a delay?
 
+ Serial.println("Init player");
 
   // Initialize the player
   if ( !player.begin()) { // initialise the player
@@ -492,13 +492,13 @@ unsigned int getVolume() {
 unsigned int getChanges() {
   unsigned int changes;
 
-  digitalWrite(FPCS, LOW);
+  fpCSVirtualPin.write(LOW);
   SPI.transfer(INST_GET_CHANGES);
   delayMicroseconds(20);   //Wait for the instruction to be processed by the slave.
 
   // Transfer byte) from the slave and pack it into an unsigned int
   changes = SPI.transfer(0x00);
-  digitalWrite(FPCS, HIGH);
+  fpCSVirtualPin.write(HIGH);
 
   return changes;
 }
