@@ -1,62 +1,56 @@
 /*
  * FPPinExpanderTest
  *
- * Test of the FPController virtual pin emulation (expanded pins for chip selects).
+ * Test of the  virtual pin emulation (expanded pins for chip selects)
+ * using the 2-line to 3-line decoder
  *
  * Needs to run on the ESP8266.
  *
  */
 
-#include <SPI.h>
+#include "VirtualPinDecoder.h"
 
-#include "VirtualPinEmulation.h"
+// Pin setup for the AVR chip used as front panel controller
+const int DECODE_0_PIN = 15;
+const int DECODE_1_PIN = 0;
 
-const int SLAVE_SELECT_PIN = 0; // TODO check that this is correct one
-                                // This is the pin on the ESP8266 side connected to the SS pin
-                                // AVR uC running the FP controller software
-
-VirtualPinEmulation virtualPin1 = VirtualPinEmulation(SLAVE_SELECT_PIN, 1);
-VirtualPinEmulation virtualPin2 = VirtualPinEmulation(SLAVE_SELECT_PIN, 2);
-
-const byte INST_NULL = 0x00;
-
+VirtualPinDecoder xcsVirtualPin = VirtualPinDecoder(DECODE_0_PIN, DECODE_1_PIN, LOW, HIGH);
+VirtualPinDecoder ramCSVirtualPin = VirtualPinDecoder(DECODE_0_PIN, DECODE_1_PIN, HIGH, HIGH);
+VirtualPinDecoder fpCSVirtualPin = VirtualPinDecoder(DECODE_0_PIN, DECODE_1_PIN, HIGH, LOW);
 
 const int MS = 1;
 const int US = 0;
 
-boolean z = false;
 
 void setup() {
   Serial.begin(115200);
 
   Serial.println("Initializing");
-  SPI.begin();
 
-  pinMode(SLAVE_SELECT_PIN, OUTPUT);
-  
-  FP_begin(); // To reset THIS IS IMPORTANT --> Make it a reset function the master
+  pinMode(DECODE_0_PIN, OUTPUT);
+  pinMode(DECODE_1_PIN, OUTPUT);
 
-  virtualPin1.begin();
-  virtualPin2.begin();
-
-  }
+  xcsVirtualPin.begin();
+  ramCSVirtualPin.begin();
+  fpCSVirtualPin.begin();
+}
 
 void loop() {
-  unsigned long timestamp; 
-  
-//  timestamp = micros();
-  virtualPin1.write(HIGH);
-//  timestamp = micros() - timestamp;
-//  Serial.print("-->"); Serial.println(timestamp); 
-  
-//  wait(500, MS);
-//  virtualPin2.write(LOW);
-  //wait(50, US);
-  virtualPin1.write(LOW);
-  //wait(50, US);
-//  virtualPin2.write(HIGH);
-//  wait(1000, US);
+  unsigned long period = 50;
 
+//  timestamp = micros();
+  xcsVirtualPin.write(HIGH);
+  wait(period, MS);
+  xcsVirtualPin.write(LOW);
+  wait(period, MS);
+  ramCSVirtualPin.write(HIGH);
+  wait(period, MS);
+  ramCSVirtualPin.write(LOW);
+  wait(period, MS);
+  fpCSVirtualPin.write(HIGH);
+  wait(period, MS);
+  fpCSVirtualPin.write(LOW);
+  wait(period, MS);
 }
 
 void wait(unsigned long period, int unit) {
@@ -67,13 +61,5 @@ void wait(unsigned long period, int unit) {
   else {
     delay(period);
   }
-  
-}
 
-
-void FP_begin() {
-  Serial.println("SEND NULL INSTRUCTION TO RESET");
-  digitalWrite(SLAVE_SELECT_PIN, LOW);
-  SPI.transfer(INST_NULL);
-  digitalWrite(SLAVE_SELECT_PIN, HIGH);
 }
