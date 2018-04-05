@@ -38,7 +38,7 @@ $Descr A3 16535 11693
 encoding utf-8
 Sheet 1 1
 Title "Internet Radio Minibox"
-Date "2017-03-26"
+Date "2018-03-03"
 Rev "4"
 Comp ""
 Comment1 "Design: Andrew Doble"
