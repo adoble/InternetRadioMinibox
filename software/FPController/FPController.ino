@@ -20,8 +20,6 @@
   *                                     Once read the FPController sets ALL bits back to zero.
   *  INST_RESET_CHANGES        0x06     Resets the change bits. This should be used after ALL changes have
   *                                     been processed.
-  *  INST_VIRTUAL_PIN         0x07      Drives the specified virtual pin used for SPI chip select pin low.
-  *                                     See "Values taken by INST_VIRTUAL_PIN".
   *
   *  Change Status Bits (from INST_GET_CHANGES)
   *  Bit Name                 Code      Description
@@ -29,13 +27,6 @@
   *  CHANGED_VOL              0x01      The volume has changed
   *  CHANGED_STATION          0x02      A new station has been selected
   *
-  *  Values taken by INST_VIRTUAL_PIN
-  *  Bit           Value           Description
-  *  =======       =============   ===============================================================
-  *  7             1               If the specified virtual pin should be driven HIGH.
-  *                0               If the specified virtual pin should be driven LOW
-  *  0-6           Virtual pin     This has a range from 1 - 63
-  *  Note: If this byte is 0 then this is acts as a reset.
   */
 
 #include <SPI.h>
@@ -49,7 +40,7 @@ volatile char instruction;
 const int NUMBER_STATIONS = 10;
 
 // Instructions codes need to start at 0x00 and be contiguous
-const int NUMBER_INSTRUCTIONS = 8;
+const int NUMBER_INSTRUCTIONS = 7;
 
 const byte INST_NULL              = 0x00;
 const byte INST_GET_STATION       = 0x01;
@@ -58,34 +49,29 @@ const byte INST_STATUS_OK         = 0x03;
 const byte INST_STATUS_ERROR      = 0x04;
 const byte INST_GET_CHANGES       = 0x05;
 const byte INST_RESET_CHANGES     = 0x06;
-const byte INST_VIRTUAL_PIN      = 0x07;
+
 
 // Changed status bits
 const byte CHANGED_VOL_BIT     = 0;     // The volume has changed
 const byte CHANGED_STATION_BIT = 1;     // A new station has been selected
 
-// Values for the instruction INST_VIRTUAL_PIN.
-const byte EXP_PIN_1 = 1;  // Mapped to SPI_XCS
-const byte EXP_PIN_2 = 2;  // Mapped to SPI_RAM_CS
-
-const byte READ = 0x00;
-const byte WRITE = 0x01;
-const byte NO_TRANSFER = 0x03;
+// Types of instructions
+const byte READ = 0x00;         // Read from the controller
+const byte WRITE = 0x01;        // Write to the controller
+const byte NO_TRANSFER = 0x03;  // No transfer of data to or from the controller
 
 // Array to specify if the instruction is read (read from the controller),
 // write (writtten to the controller)
 // or if no transfer of bytes takes place.
 // The array is indexed by the instruction code.
 int instructionTypes[] = {
-                              NO_TRANSFER, // INST_NULL = 0x00;
+                              NO_TRANSFER,  // INST_NULL = 0x00;
                               READ,         // INST_GET_STATION = 0x01,
                               READ,         // INST_GET_VOL = 0x02
                               NO_TRANSFER,  // INST_STATUS_OK = 0x03
                               WRITE,        // INST_STATUS_ERROR = 0x04
-                              READ,         // INST_GET_CHANGES  = 0x05
-                              NO_TRANSFER,  // INST_RESET_CHANGES = 0x06
-                              WRITE         // INST_VIRTUAL_PIN = 0x07;
-                          };
+                              READ          // INST_GET_CHANGES  = 0x05
+                              };
 
 
 
@@ -337,25 +323,6 @@ Serial.print("INST:"); Serial.println(instruction, OCT);
         errorCode = transferBuffer[INST_STATUS_ERROR];
         Serial.print("Error code rcx:"); Serial.println(errorCode);
       }
-      else if (instruction == INST_VIRTUAL_PIN) {
-        expandedOutputPin = transferBuffer[INST_VIRTUAL_PIN] & 0x177;
-        // Map to the actual pins. Only 2 pins so just hardcode it.
-        int expandedPinValue = (transferBuffer[INST_VIRTUAL_PIN] >> 7) ? HIGH : LOW;
-
-        Serial.print("expandedOutputPin ");
-        Serial.print(expandedOutputPin);
-        Serial.print(" = ");
-        Serial.println(expandedPinValue, OCT);
-        
-        if (expandedOutputPin ==  EXP_PIN_1) digitalWrite(SPI_XCS, expandedPinValue);
-        if (expandedOutputPin ==  EXP_PIN_2) digitalWrite(SPI_RAM_CS, expandedPinValue);
-        if (expandedOutputPin == 0) {
-          // Reset. Formally this should happen when  the value is zero,
-          // but extend this for any other value.
-          digitalWrite(SPI_XCS, HIGH);
-          digitalWrite(SPI_RAM_CS, HIGH);;
-        }
-      }
 
     processInstruction= false;
     }  // end of process instruction
@@ -409,12 +376,10 @@ Serial.print("INST:"); Serial.println(instruction, OCT);
    pinMode(STATION_TUNING_IN_PIN, OUTPUT);
 
    // If a change has occured then pulse the front panel interrupt signal
-   // to indicate that a change has talen replace
-   // Now pulse the front panel interrupt signal
-   // to indicate that a change has talen replace
+   // to indicate that a change has happened
    if (transferBuffer[INST_GET_CHANGES] & (1<<CHANGED_VOL_BIT)) {
      digitalWrite(FP_CHANGE_INTR, LOW);
-     delayMicroseconds(10);  //TODO from literature
+     delayMicroseconds(1);  // 1 microsecond pulse, longer than 7 clock cycles
      digitalWrite(FP_CHANGE_INTR, HIGH);
    }
 
