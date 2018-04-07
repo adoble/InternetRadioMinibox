@@ -6,6 +6,11 @@ K RAM SPI
 F http://ww1.microchip.com/downloads/en/DeviceDoc/22100F.pdf
 $ENDCMP
 #
+$CMP Adafruit-Feather-M0-WiFi
+D Adafruit Feather M0 WiFi - ATSAMD21 + ATWINC1500
+F https://www.adafruit.com/product/3010
+$ENDCMP
+#
 $CMP ESP8266
 D IN-CIRCUIT ESP8266 BOARD
 F http://wiki.in-circuit.de/images/e/eb/610000292A_handout.pdf
