@@ -15,8 +15,6 @@
 #include <Arduino.h>
 #include <SPI.h>
 
-#include "VirtualPin.h"  
-
 // SRAM instructions
 #define RDSR  0x05
 #define WRSR  0x01
@@ -39,10 +37,16 @@ class SPIRingBuffer
 {
   private:
     // Chip select pin
-    //uint8_t csPin;
-    VirtualPin* _virtualChipSelect;
+    uint8_t csPin;
+
     // SPI interface
-    SPIClass spi;
+    #if defined(ARDUINO_SAMD_ZERO)
+      // Required for Serial on Zero based boards
+      SPIClass spi = SPIClass(&sercom4, 22, 24, 23, SPI_PAD_2_SCK_3, SERCOM_RX_PAD_0);
+    #else
+      SPIClass spi;
+    #endif
+
 
     // Operation mode
     unsigned char operationMode;
@@ -77,15 +81,6 @@ class SPIRingBuffer
      * param chipSelectPin The digital pin used a SPI slave select
      */
     SPIRingBuffer(uint8_t chipSelectPin);
-
-    /**
-     * Class constructor with expanded pin
-     *
-     * param virtualChipSelect The virtual expanded pin used
-     *                         to drive the SPI slave select
-     */
-    SPIRingBuffer(VirtualPin virtualChipSelect);
-
 
     /**
      *  Initialize the communication and indexes

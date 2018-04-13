@@ -14,22 +14,9 @@
  */
 SPIRingBuffer::SPIRingBuffer(uint8_t chipSelectPin)
 {
-  //csPin = chipSelectPin;
-  _virtualChipSelect = new VirtualPin(chipSelectPin);
+  csPin = chipSelectPin;
   operationMode = 0xFF;   // TODO need it?
 }
-
-/**
- * Class constructor with expanded pin
- *
- * param virtualChipSelect The virtual expanded pin used
- *                         to drive the SPI slave select
- */
-SPIRingBuffer::SPIRingBuffer(VirtualPin virtualChipSelect) {
-  _virtualChipSelect = &virtualChipSelect;
-  operationMode = 0xFF;   // TODO need it?
-}
-
 
 /**
  *  Initialize the SPI communication
@@ -37,8 +24,8 @@ SPIRingBuffer::SPIRingBuffer(VirtualPin virtualChipSelect) {
  */
  void SPIRingBuffer::begin(void)
  {
-   //pinMode(csPin, OUTPUT);
-   _virtualChipSelect->mode(OUTPUT);
+   pinMode(csPin, OUTPUT);
+
    chipSelect(false);
 
    //spi.setFrequency(RAMCLK);
@@ -174,12 +161,12 @@ void SPIRingBuffer::setMode(char mode)
 {
   if (mode != operationMode)
   {
-    //SPI.beginTransaction(RAM_SPI_SETTING);
+    //spi.beginTransaction(RAM_SPI_SETTING);
     chipSelect(true);
     spi.transfer(WRSR);
     spi.transfer(mode);
     chipSelect(false);
-    //SPI.endTransaction();
+    //spi.endTransaction();
     operationMode = mode;
   }
 }
@@ -199,7 +186,7 @@ unsigned char SPIRingBuffer::readByte(unsigned int address)
   unsigned char res;
 
 
-  //SPI.beginTransaction(RAM_SPI_SETTING);
+  //spi.beginTransaction(RAM_SPI_SETTING);
 
   // Set byte mode
   setMode(BYTE_MODE);
@@ -217,7 +204,7 @@ unsigned char SPIRingBuffer::readByte(unsigned int address)
 
   chipSelect(false);
 
-  //SPI.endTransaction();
+  //spi.endTransaction();
 
   return res;
 }
@@ -230,7 +217,7 @@ unsigned char SPIRingBuffer::readByte(unsigned int address)
  */
 void SPIRingBuffer::writeByte(unsigned int address, char data)
 {
-  //SPI.beginTransaction(RAM_SPI_SETTING);
+  //spi.beginTransaction(RAM_SPI_SETTING);
 
   // Set byte mode
   setMode(BYTE_MODE);
@@ -252,7 +239,7 @@ void SPIRingBuffer::writeByte(unsigned int address, char data)
 
   chipSelect(false);
 
-  //SPI.endTransaction();
+  //spi.endTransaction();
 }
 
 /**
@@ -262,6 +249,5 @@ void SPIRingBuffer::writeByte(unsigned int address, char data)
  */
  void  SPIRingBuffer::chipSelect(bool state)
  {
-   //digitalWrite(csPin, !state);
-   _virtualChipSelect->write(!state);
+   digitalWrite(csPin, !state);
  }
