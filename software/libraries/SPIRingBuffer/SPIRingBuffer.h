@@ -1,5 +1,5 @@
 /*
- *
+ *  NEED TO RETEST THIS FOR THE NON-SERCOM USE OF SPI (I:E: STANDARD ARUINO)
  * A ring buffer that is implemented to use an SPI based RAM such as the 23K256.
  * It uses the functions put() and get() to place bytes in the
  * buffer and retreive them respectively.
@@ -27,8 +27,8 @@
 // SRAM byte mode
 #define BYTE_MODE (0x00 | HOLD_DISABLE)
 
- // Clock speed 16 MHz
- #define RAMCLK 16000000
+ // Clock speed 14 MHz
+ #define RAMCLK 14000000
 
  // SPI setting for the RAM chip
  #define RAM_SPI_SETTING SPISettings(RAMCLK,  MSBFIRST, SPI_MODE0)
@@ -39,14 +39,7 @@ class SPIRingBuffer
     // Chip select pin
     uint8_t csPin;
 
-    // SPI interface
-    #if defined(ARDUINO_SAMD_ZERO)
-      // Required for Serial on Zero based boards
-      SPIClass spi = SPIClass(&sercom4, 22, 24, 23, SPI_PAD_2_SCK_3, SERCOM_RX_PAD_0);
-    #else
-      SPIClass spi;
-    #endif
-
+    SPIClass* spi;
 
     // Operation mode
     unsigned char operationMode;
@@ -78,15 +71,34 @@ class SPIRingBuffer
     /**
      * Class constructor
      *
-     * param chipSelectPin The digital pin used a SPI slave select
+     * Params
+     *    chipSelectPin The digital pin used as SPI slave select
      */
     SPIRingBuffer(uint8_t chipSelectPin);
+
+    /**
+     *  Class constructor used when another a non-standard SPI is used (e.g. for
+     *  M0 when another SERCOM is used).
+     *
+     * Params
+     *  configuredSPI the SPIClass used (pointer to)
+     *  chipSelectPin The digital pin used as SPI slave select
+     */
+    SPIRingBuffer(SPIClass* configuredSPI, uint8_t chipSelectPin);
+
+    /**
+     *  Class destructor. Removes any created SPI objects and ends any open
+     *  SPI transactions.
+     */
+    ~SPIRingBuffer() ;
 
     /**
      *  Initialize the communication and indexes
      *
      */
      void begin(void);
+
+
 
      /**
       *  Initialize the indexes.
