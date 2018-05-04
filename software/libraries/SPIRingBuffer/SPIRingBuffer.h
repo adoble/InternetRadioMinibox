@@ -27,8 +27,8 @@
 // SRAM byte mode
 #define BYTE_MODE (0x00 | HOLD_DISABLE)
 
- // Clock speed 14 MHz
- #define RAMCLK 14000000
+ // Clock speed 8 MHz
+#define RAMCLK 8000000
 
  // SPI setting for the RAM chip
  #define RAM_SPI_SETTING SPISettings(RAMCLK,  MSBFIRST, SPI_MODE0)
