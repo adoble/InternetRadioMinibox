@@ -31,8 +31,6 @@
 
 #include <SPI.h>
 
-#include "VirtualPin.h"
-
 #ifdef __SAM3X8E__
 typedef volatile RwReg PortReg;
 typedef uint32_t PortMask;
@@ -104,15 +102,19 @@ class Lemon_VS1053 {
    */
   Lemon_VS1053(int8_t rst, int8_t cs, int8_t dcs, int8_t dreq);
 
- /** Constructor using an expanded pin for chip select
-  *  Params:
-  *  rst  Reset
-  *  virtualCS   Virtual pin used for Command chip select
-  *  dcs  Data chip select
-  *  dreq Request data (ie. ready for data)
-  */
-  Lemon_VS1053(int8_t rst, VirtualPin virtualCS, int8_t dcs, int8_t dreq);
-
+  /**
+   *  Constructor to define pins used and a configured SPI object.
+   * This can be used for M0 based designs in which the SPI pins use a
+   *   different SERCOM.
+   *
+   *  Params:
+   *  configuredSPI (Pointer to) The SPI object using a different SERCOM
+   *  rst           Reset
+   *  cs            Command chip select
+   *  dcs           Data chip select
+   *  dreq          Request data (ie. ready for data)
+   */
+  Lemon_VS1053(SPIClass* configuredSPI, int8_t rst, int8_t cs, int8_t dcs, int8_t dreq);
 
   uint8_t begin(void);
   void reset(void);
@@ -148,7 +150,11 @@ class Lemon_VS1053 {
  private:
   int8_t _mosi, _miso, _clk, _reset, _cs, _dcs;
   boolean useHardwareSPI;
-  VirtualPin* _virtualChipSelect;
+  boolean useConfiguredSPI;
+
+  // SPI interface
+  SPIClass* spi;
+
 
 };
 
