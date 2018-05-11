@@ -59,7 +59,7 @@ SPIRingBuffer::~SPIRingBuffer() {
    chipSelect(false);
 
    //spi.setFrequency(RAMCLK);
-   spi->begin();
+   //spi->begin();
 
    // reset the indexes.
    //reset();

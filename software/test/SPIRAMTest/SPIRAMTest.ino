@@ -17,10 +17,15 @@ SPIClass *spi;
 //SPIClass spi(&sercom1, 12, 13, 11, SPI_PAD_0_SCK_1, SERCOM_RX_PAD_3);
 
 //SPISettings spiSettings(16000000, MSBFIRST, SPI_MODE0);   // NOT OK
-//SPISettings spiSettings(8000000, MSBFIRST, SPI_MODE0);
-//SPISettings spiSettings(1000000, MSBFIRST, SPI_MODE0);  //OK
-//SPISettings spiSettings(1200000, MSBFIRST, SPI_MODE0);  //OK
-SPISettings spiSettings(1400000, MSBFIRST, SPI_MODE0);    //OK
+  SPISettings spiSettings(8000000, MSBFIRST, SPI_MODE0);  // OK
+// SPISettings spiSettings(1000000, MSBFIRST, SPI_MODE0);  //OK
+// SPISettings spiSettings(1200000, MSBFIRST, SPI_MODE0);  //OK
+// SPISettings spiSettings(1400000, MSBFIRST, SPI_MODE0);    //OK
+// SPISettings spiSettings(1200000, MSBFIRST, SPI_MODE0);   
+// SPISettings spiSettings(10000000, MSBFIRST, SPI_MODE0);   // NOT OK
+//  SPISettings spiSettings(14000000, MSBFIRST, SPI_MODE0);  // NOT OK
+
+
     
 
 

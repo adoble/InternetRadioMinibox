@@ -10,15 +10,14 @@
 #include "wiring_private.h"
 
 
-const char programName[] = "SpiRAMRingBuffer - M0 Version";
+const char programName[] = "SpiRAMRingBuffer - M0 SPI Version";
 
 // Pins
 const int CS = A4; // Chip select pin = A4
 
 SPIClass spi(&sercom1, 12, 13, 11, SPI_PAD_0_SCK_1, SERCOM_RX_PAD_3);
 
-SPIRingBuffer ringBuffer(spi, CS);   // TODO Try setting spi in begin!!!
-
+SPIRingBuffer ringBuffer(&spi,CS);
 
 // Function protoypes for testing
 void isEqual(String, int32_t, int32_t);
@@ -62,15 +61,12 @@ String msg;
 
 
 void setup() {
-  
+  while(!Serial);
   Serial.begin(115200);
-  
 
-  //spi.begin();   // DONT NEED TO DO THIS
-  // Assign pins 11, 12, 13 to SERCOM functionality
- // pinPeripheral(11, PIO_SERCOM);
- // pinPeripheral(12, PIO_SERCOM);
- // pinPeripheral(13, PIO_SERCOM);
+
+ //spi.begin();   // DONT NEED TO DO THIS
+ 
 
 
   // So we know what version we are running
@@ -95,15 +91,20 @@ void setup() {
   delay(10);
 
 
-
   // Set up the ring buffer RAM
   ringBuffer.begin();
+
+ // Assign pins 11, 12, 13 to SERCOM functionality
+  pinPeripheral(11, PIO_SERCOM);
+  pinPeripheral(12, PIO_SERCOM);
+  pinPeripheral(13, PIO_SERCOM);
+
+  
 
   // Set the first test
   //testState = TEST_1;
   testState = INIT; i = 0;
-
-
+ 
 }
 
 
@@ -195,7 +196,11 @@ void loop() {
     msg = "TEST 3 put at address ";
     msg.concat(i);
     data = i % 256;
+    msg.concat(" this data ");
+    msg.concat(data);
+    //Serial.println(msg);
     isNotEqual(msg, ringBuffer.put(data), -1);
+    
     i++;
 
     if (i == half)  { // have half filled the memory
@@ -209,10 +214,13 @@ void loop() {
   case TEST_3_2:
     // 2. Now read and check that all is ok
 
-    msg = "TEST 3 get at address ";
+    msg = "TEST 3 got at address ";
     msg.concat(i);
     expectedData = i % 256;
-    isEqual(msg, ringBuffer.get(), expectedData);
+    data = ringBuffer.get();
+    msg.concat(" this data ");
+    msg.concat(data);
+    isEqual(msg, data, expectedData);
     i++;
     if (i == half) {
       Serial.println("End TEST 3 --------------"); Serial.println();

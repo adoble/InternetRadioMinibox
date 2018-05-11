@@ -6,6 +6,16 @@ SPIClass mySPI (&sercom1, 12, 13, 11, SPI_PAD_0_SCK_1, SERCOM_RX_PAD_3);
 void setup() {
   Serial.begin(115200);
 
+  pinMode(A2, OUTPUT);
+  digitalWrite(A2, HIGH);
+  pinMode(A4, OUTPUT);
+  digitalWrite(A4, HIGH);
+  pinMode(A5, OUTPUT);
+  digitalWrite(A5, HIGH);
+  pinMode(6, OUTPUT);
+  digitalWrite(6, HIGH);
+  
+
   // do this first, for Reasons
   mySPI.begin();
 
@@ -18,9 +28,11 @@ void setup() {
 uint8_t i=0;
 void loop() {
   Serial.println(i);
-  mySPI.beginTransaction(SPISettings(8000000, MSBFIRST, SPI_MODE0));
+  //mySPI.beginTransaction(SPISettings(8000000, MSBFIRST, SPI_MODE0));
+  mySPI.beginTransaction(SPISettings(16000000, MSBFIRST, SPI_MODE0));
+  //mySPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE0));
   //mySPI.transfer(i++);
-  mySPI.transfer(B11001111);
+  mySPI.transfer(B01010101);
   
   mySPI.endTransaction();
 }
