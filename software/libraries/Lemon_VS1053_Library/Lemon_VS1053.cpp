@@ -58,7 +58,6 @@ Lemon_VS1053::Lemon_VS1053(SPIClass *configuredSPI, int8_t rst, int8_t cs, int8_
   _cs = cs;
   _dcs = dcs;
   _dreq = dreq;
-  _cs = cs;
 
   spi = configuredSPI;  // Repace the standard one with the configured one
 
@@ -74,7 +73,6 @@ Lemon_VS1053::Lemon_VS1053(int8_t rst, int8_t cs, int8_t dcs, int8_t dreq) {
   _cs = cs;
   _dcs = dcs;
   _dreq = dreq;
-  _cs = cs;
 
   // SPI interface
   #if defined(ARDUINO_SAMD_ZERO)
@@ -230,6 +228,7 @@ uint8_t Lemon_VS1053::begin(void) {
     digitalWrite(_reset, LOW);
   }
 
+  pinMode(_cs, OUTPUT);
   digitalWrite(_cs, HIGH);
 
   pinMode(_dcs, OUTPUT);
@@ -252,7 +251,7 @@ uint8_t Lemon_VS1053::begin(void) {
   reset();
 
   // Make sure that the VS1053 board is set into MP3 mode
-  setMP3Mode();
+  //setMP3Mode();
   //Serial.print("REG STATUS ");Serial.println(sciRead(VS1053_REG_STATUS));   // DEBUG
 
   return (sciRead(VS1053_REG_STATUS) >> 4) & 0x0F;
