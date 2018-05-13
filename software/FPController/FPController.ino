@@ -164,6 +164,8 @@ int oldStation = -1;
 
 byte expandedOutputPin;
 
+boolean changeOccured = false; 
+
 void setup (void)
 {
   Serial.begin (115200);   // debugging
@@ -183,6 +185,9 @@ void setup (void)
   pinMode(SPI_RAM_CS, OUTPUT);
   digitalWrite(SPI_XCS, HIGH);
   digitalWrite(SPI_RAM_CS, HIGH);
+
+  pinMode(FP_CHANGE_INTR, OUTPUT);
+  digitalWrite(FP_CHANGE_INTR, HIGH);
 
 
   // have to send on master in, *slave out*
@@ -337,6 +342,8 @@ Serial.print("INST:"); Serial.println(instruction, OCT);
       bitSet(transferBuffer[INST_GET_CHANGES], CHANGED_VOL_BIT);
       // Transfer the volume to the transferBuffer
       transferBuffer[INST_GET_VOL] = volume;
+      // Indicate that a chnage has occured
+      changeOccured = true;
     }
     interrupts();
 
@@ -365,6 +372,8 @@ Serial.print("INST:"); Serial.println(instruction, OCT);
         noInterrupts();
         bitSet(transferBuffer[INST_GET_CHANGES], CHANGED_STATION_BIT);
         transferBuffer[INST_GET_STATION] = station & 0x00FF;
+        // Indicate that a change has occured
+        changeOccured = true;
         interrupts();
       }
 
@@ -377,10 +386,12 @@ Serial.print("INST:"); Serial.println(instruction, OCT);
 
    // If a change has occured then pulse the front panel interrupt signal
    // to indicate that a change has happened
-   if (transferBuffer[INST_GET_CHANGES] & (1<<CHANGED_VOL_BIT)) {
+   //if (transferBuffer[INST_GET_CHANGES] & (1<<CHANGED_VOL_BIT)) {
+   if (changeOccured) {  
      digitalWrite(FP_CHANGE_INTR, LOW);
      delayMicroseconds(1);  // 1 microsecond pulse, longer than 7 clock cycles
      digitalWrite(FP_CHANGE_INTR, HIGH);
+     changeOccured = false; 
    }
 
    // Display the error code
