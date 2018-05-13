@@ -140,10 +140,11 @@ String currentStation;
 size_t nBytes;
 
 // Pointer to the payload stream, i.e. the MP3 data from the internet station.
-WiFiClient * stream;
+//WiFiClient * stream;
 
 // HTTP codes not covered by the Arduino HTTP client
 // and are relevant
+const int HTTP_OK = 200;
 const int HTTP_TEMPORARY_REDIRECT = 307;
 const int HTTP_PERMANENT_REDIRECT = 308;
 
@@ -159,6 +160,8 @@ void connectWLAN(const char*, const char*);
 void handleRedirect();
 void handleOtherCode(int);
 String getStationURL();
+String getHostFromURL(String);
+String getPathFromURL(String);
 
 
 /* Interrupt function for a change in the volume of the station
@@ -191,15 +194,13 @@ void setup() {
   pinMode(RAMCS, OUTPUT);
   digitalWrite(RAMCS, HIGH);
 
-  //spi.begin();  // For reasons
-
+  
   // Assign pins 11, 12, 13 to SERCOM functionality
   // TODO Symbolic names for the pins
   pinPeripheral(11, PIO_SERCOM);
   pinPeripheral(12, PIO_SERCOM);
   pinPeripheral(13, PIO_SERCOM);
-   //TODO should this be after ringBuffer.begin() for, you know, reasons.
-
+  
   delay(50);
 
   Serial.println("Init ring buffer");
@@ -225,8 +226,8 @@ void setup() {
   
   // Set the initial volume by reading from the front panel controller
   while (!player.readyForData()) { }
-  Serial.println("Volume setting to 60");
-  player.setVolume(60,60);  // Higher is quieter.
+  Serial.println("Volume setting to 70");
+  player.setVolume(70,70);  // Higher is quieter.
   //adjustVolume();   //TODO provide a way for the FP controller to say that data is ready and that can work when it is disconnected
   
     // Setup the interrupt for changes to the controls
@@ -252,12 +253,19 @@ void setup() {
       Serial.print(currentStation);
       Serial.println(" ...");
 
-      // Configure server and url
-      HttpClient http = HttpClient(wifiClient, currentStation);
+      String host = getHostFromURL(currentStation);
+      String path = getPathFromURL(currentStation);
 
+      Serial.print("Host:"); Serial.println(host); 
+      Serial.print("Path:"); Serial.println(path); 
+
+      // Configure server and url
+      HttpClient http = HttpClient(wifiClient, host);
+      
       Serial.print("[HTTP] GET...\n");
       // start connection and send HTTP header
-      http.get("/");
+      http.get(path);
+      
       int httpCode = http.responseStatusCode();
       if(httpCode > 0) {
           // HTTP header has been sent and server response header has been handled
@@ -265,11 +273,10 @@ void setup() {
 
           // file found at server
           switch (httpCode) {
-            case HTTP_SUCCESS:
+            case HTTP_OK:
               // Continue to the loop
               // get tcp stream of payload
               //stream = http.getStreamPtr();
-    Serial.println("HTTP SUCCESS");
               break;
             case HTTP_TEMPORARY_REDIRECT:
                handleRedirect();
@@ -286,7 +293,7 @@ void setup() {
       }
       else {
           // TODO replace this with the general error handling
-          Serial.println("[HTTP] GET... failed, error: "); Serial.println(httpCode);
+          Serial.print("[HTTP] GET... failed, http code: "); Serial.println(httpCode);
       }
   //}  // --- wifi connected
 
@@ -298,7 +305,8 @@ void loop() {
 
   if (!bufferInitialized) {
     // Load up the buffer
-    nBytes = stream->available();
+    //nBytes = stream->available();
+    nBytes = wifiClient.available();   
     if (nBytes) {
       // read in chunks of up to 32 bytes
 
@@ -331,7 +339,8 @@ void loop() {
   //
   if (bufferInitialized) {
     if (ringBuffer.availableSpace() > DATABUFFERLEN) {
-      nBytes = stream->available();
+      //nBytes = stream->available();
+      nBytes = wifiClient.available();
       if (nBytes) {
         // read up to 32 bytes
         nRead = wifiClient.read(mp3Buffer, (nBytes> DATABUFFERLEN ? DATABUFFERLEN : nBytes));  // Assuming that this exists (undocumented) in the WiFI101 library
@@ -490,16 +499,12 @@ void adjustVolume() {
 unsigned int getVolume() {
   unsigned int volume;
 
-Serial.println("GET VOLUME");
-
   digitalWrite(FPCS, LOW);
   SPI.transfer(INST_GET_VOL);
   delayMicroseconds(20);   //Wait for the instruction to be processed by the slave.
   // Transfer byte from the slave and pack it into an unsigned int
   volume  = SPI.transfer(0x00);
   digitalWrite(FPCS, HIGH);
-
-Serial.print("GOT VOLUME: "); Serial.println(volume);
 
   return volume;
 }
@@ -521,6 +526,39 @@ unsigned int getChanges() {
   return changes;
 }
 
+
+String getHostFromURL(String url) {
+  int startPos; 
+  int endPos;
+  
+  // Skip past any protocol specification. Assuming that is http:// or is not specified
+  if (url.startsWith("http://")) {
+    startPos = 7;
+  } else {
+    startPos = 0;
+  }    
+ 
+  endPos = url.indexOf('/', startPos);
+  // Extract the host name
+  return url.substring(startPos, endPos); 
+}
+
+String getPathFromURL(String url) {
+  int startPos;
+  int endPos;
+
+  // Skip past any protocol specification. Assuming that is http:// or is not specified
+  if (url.startsWith("http://")) {
+    startPos = 7;
+  } else {
+    startPos = 0;
+  }   
+
+  // Now extract the path
+  startPos = url.indexOf('/', startPos);
+  return url.substring(startPos);
+  
+}
 
 // Set the VS1053 chip into MP3 mode
 //void set_mp3_mode()
