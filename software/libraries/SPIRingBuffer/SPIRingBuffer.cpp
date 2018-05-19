@@ -16,7 +16,36 @@ SPIRingBuffer::SPIRingBuffer(uint8_t chipSelectPin)
 {
   csPin = chipSelectPin;
   operationMode = 0xFF;   // TODO need it?
+
+
+  // SPI interface
+  #if defined(ARDUINO_SAMD_ZERO)
+    // Required for Serial on Zero based boards
+    spi = new SPIClass(&sercom4, 22, 24, 23, SPI_PAD_2_SCK_3, SERCOM_RX_PAD_0);
+  #else
+    spi = &SPI;
+  #endif
+
+
 }
+
+// TODO Comment!
+SPIRingBuffer::SPIRingBuffer(SPIClass *configuredSPI, uint8_t chipSelectPin) {
+  csPin  = chipSelectPin;
+  operationMode = 0xFF;
+  spi = configuredSPI; // Replace the standard SPI with the configured one
+}
+
+// TODO Comment!
+SPIRingBuffer::~SPIRingBuffer() {
+  if(spi) {
+    spi->endTransaction();
+  #ifdef SPI
+    if(spi != &SPI) delete spi;
+  #endif
+  }
+}
+
 
 
 /**
@@ -26,10 +55,11 @@ SPIRingBuffer::SPIRingBuffer(uint8_t chipSelectPin)
  void SPIRingBuffer::begin(void)
  {
    pinMode(csPin, OUTPUT);
+
    chipSelect(false);
 
    //spi.setFrequency(RAMCLK);
-   spi.begin();
+   //spi->begin();
 
    // reset the indexes.
    //reset();
@@ -161,12 +191,12 @@ void SPIRingBuffer::setMode(char mode)
 {
   if (mode != operationMode)
   {
-    //SPI.beginTransaction(RAM_SPI_SETTING);
+    spi->beginTransaction(RAM_SPI_SETTING);
     chipSelect(true);
-    spi.transfer(WRSR);
-    spi.transfer(mode);
+    spi->transfer(WRSR);
+    spi->transfer(mode);
     chipSelect(false);
-    //SPI.endTransaction();
+    spi->endTransaction();
     operationMode = mode;
   }
 }
@@ -185,26 +215,23 @@ unsigned char SPIRingBuffer::readByte(unsigned int address)
   //unsigned char res;
   unsigned char res;
 
-
-  //SPI.beginTransaction(RAM_SPI_SETTING);
-
   // Set byte mode
   setMode(BYTE_MODE);
 
   // Write address, read data
+  spi->beginTransaction(RAM_SPI_SETTING);
   chipSelect(true);
-  spi.transfer(READ);
-  spi.transfer((unsigned char)(address >> 8));
-  spi.transfer((unsigned char)address);
+  spi->transfer(READ);
+  spi->transfer((unsigned char)(address >> 8));
+  spi->transfer((unsigned char)address);
 
-  res = spi.transfer(0xFF);
+  res = spi->transfer(0xFF);
 
+  chipSelect(false);
+  spi->endTransaction();
   // TODO DEBUG
   //Serial.print("Just read: 0x"); Serial.print(res, HEX);Serial.print(" from 0x"); Serial.println(address, HEX);
 
-  chipSelect(false);
-
-  //SPI.endTransaction();
 
   return res;
 }
@@ -217,7 +244,7 @@ unsigned char SPIRingBuffer::readByte(unsigned int address)
  */
 void SPIRingBuffer::writeByte(unsigned int address, char data)
 {
-  //SPI.beginTransaction(RAM_SPI_SETTING);
+
 
   // Set byte mode
   setMode(BYTE_MODE);
@@ -227,17 +254,29 @@ void SPIRingBuffer::writeByte(unsigned int address, char data)
   //Serial.print(" LSB: 0x"); Serial.println((uint8_t)(address), HEX);
 
   // Write address, read data
+  spi->beginTransaction(RAM_SPI_SETTING);
   chipSelect(true);
-  spi.transfer(WRITE);
-  spi.transfer((unsigned char)(address >> 8));
-  spi.transfer((unsigned char)address);
+  spi->transfer(WRITE);
+  spi->transfer((unsigned char)(address >> 8));
+  spi->transfer((unsigned char)address);
 
-  spi.transfer(data);
+  spi->transfer(data);
+
+  chipSelect(false);
+  spi->endTransaction();
 
   // TODO remve debug statements
   //Serial.print("Just wrote: 0x");Serial.println(data, HEX);Serial.print(" to 0x"); Serial.println(address, HEX);
 
-  chipSelect(false);
 
-  //SPI.endTransaction();
 }
+
+/**
+ * Enable chip via CS pin
+ *
+ * @param state True to select. False to unselect
+ */
+ void  SPIRingBuffer::chipSelect(bool state)
+ {
+   digitalWrite(csPin, !state);
+ }

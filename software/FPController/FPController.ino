@@ -21,12 +21,12 @@
   *  INST_RESET_CHANGES        0x06     Resets the change bits. This should be used after ALL changes have
   *                                     been processed.
   *
-  *
   *  Change Status Bits (from INST_GET_CHANGES)
   *  Bit Name                 Code      Description
   *  ==================       =======   ===============================================================
   *  CHANGED_VOL              0x01      The volume has changed
   *  CHANGED_STATION          0x02      A new station has been selected
+  *
   */
 
 #include <SPI.h>
@@ -42,33 +42,36 @@ const int NUMBER_STATIONS = 10;
 // Instructions codes need to start at 0x00 and be contiguous
 const int NUMBER_INSTRUCTIONS = 7;
 
-const byte INST_NULL = 0x00;
-const byte INST_GET_STATION = 0x01;
-const byte INST_GET_VOL = 0x02;
-const byte INST_STATUS_OK = 0x03;
-const byte INST_STATUS_ERROR = 0x04;
-const byte INST_GET_CHANGES  = 0x05;
-const byte INST_RESET_CHANGES = 0x06;
+const byte INST_NULL              = 0x00;
+const byte INST_GET_STATION       = 0x01;
+const byte INST_GET_VOL           = 0x02;
+const byte INST_STATUS_OK         = 0x03;
+const byte INST_STATUS_ERROR      = 0x04;
+const byte INST_GET_CHANGES       = 0x05;
+const byte INST_RESET_CHANGES     = 0x06;
+
 
 // Changed status bits
 const byte CHANGED_VOL_BIT     = 0;     // The volume has changed
 const byte CHANGED_STATION_BIT = 1;     // A new station has been selected
 
-const byte READ = 0x00;
-const byte WRITE = 0x01;
-const byte NO_TRANSFER = 0x03;
+// Types of instructions
+const byte READ = 0x00;         // Read from the controller
+const byte WRITE = 0x01;        // Write to the controller
+const byte NO_TRANSFER = 0x03;  // No transfer of data to or from the controller
 
-// Array to specify if the instruction is read, write or if no transfer of bytes takes place.
+// Array to specify if the instruction is read (read from the controller),
+// write (writtten to the controller)
+// or if no transfer of bytes takes place.
 // The array is indexed by the instruction code.
 int instructionTypes[] = {
-                              NO_TRANSFER , // INST_NULL = 0x00;
+                              NO_TRANSFER,  // INST_NULL = 0x00;
                               READ,         // INST_GET_STATION = 0x01,
                               READ,         // INST_GET_VOL = 0x02
                               NO_TRANSFER,  // INST_STATUS_OK = 0x03
                               WRITE,        // INST_STATUS_ERROR = 0x04
-                              READ,         // INST_GET_CHANGES  = 0x05
-                              NO_TRANSFER   // INST_RESET_CHANGES = 0x06
-                          };
+                              READ          // INST_GET_CHANGES  = 0x05
+                              };
 
 
 
@@ -97,6 +100,14 @@ const int encoderPinB = 4;  // Other pin for for rotary encoder (volume control)
 const int STATION_TUNING_OUT_PIN = A5;
 const int STATION_TUNING_IN_PIN = A4;
 
+
+// Chip select pins
+const int SPI_XCS = A0;           // The chip select for the VS1053 codec
+const int SPI_RAM_CS = A1;        // The chip select for the RAM (the ring buffer)
+
+// Interrupt line to external processor. Pulsed low when a change to the controls occurs.
+const int FP_CHANGE_INTR = A2;
+
 // Error code mapping to the red, green LEDS in that order.
 //    0  = off
 //    1  = on
@@ -109,7 +120,7 @@ int errorCodeMap[][3] = {
                       {1,1},  // 4
                       {1,2},  // 5
                       {2,0},  // 6
-                      {2,1},  // 7
+                      {2,1},  // 7  = Invalid expanded output pin specified.
                       {2,2}   // 8  = Invalid instruction
                   };
 
@@ -151,6 +162,10 @@ const int  ENCODER_POS_ADDR = 1;    // The address used to store the last encode
 int station;
 int oldStation = -1;
 
+byte expandedOutputPin;
+
+boolean changeOccured = false; 
+
 void setup (void)
 {
   Serial.begin (115200);   // debugging
@@ -165,6 +180,15 @@ void setup (void)
   pinMode(encoderPinB, INPUT);
   digitalWrite(encoderPinA, HIGH);
   digitalWrite(encoderPinB, HIGH);
+
+  pinMode(SPI_XCS, OUTPUT);
+  pinMode(SPI_RAM_CS, OUTPUT);
+  digitalWrite(SPI_XCS, HIGH);
+  digitalWrite(SPI_RAM_CS, HIGH);
+
+  pinMode(FP_CHANGE_INTR, OUTPUT);
+  digitalWrite(FP_CHANGE_INTR, HIGH);
+
 
   // have to send on master in, *slave out*
   pinMode(MISO, OUTPUT);
@@ -287,7 +311,7 @@ void loop()
 {
 
   int lowest, highest;   // Range of noisy measurements of the variable cap.
-
+Serial.print("INST:"); Serial.println(instruction, OCT);
    if (processInstruction)
     {
       if (instruction == INST_NULL) {
@@ -304,9 +328,7 @@ void loop()
         errorCode = transferBuffer[INST_STATUS_ERROR];
         Serial.print("Error code rcx:"); Serial.println(errorCode);
       }
-      else {
-        errorCode = ERROR_INVALID_INSTRUCTION;
-      }
+
     processInstruction= false;
     }  // end of process instruction
 
@@ -320,9 +342,11 @@ void loop()
       bitSet(transferBuffer[INST_GET_CHANGES], CHANGED_VOL_BIT);
       // Transfer the volume to the transferBuffer
       transferBuffer[INST_GET_VOL] = volume;
+      // Indicate that a chnage has occured
+      changeOccured = true;
     }
-
     interrupts();
+
 
     // Now store the new position of the rotary encoder in the EEPROM
     EEPROM.write(ENCODER_POS_ADDR, encoderPos);
@@ -348,6 +372,8 @@ void loop()
         noInterrupts();
         bitSet(transferBuffer[INST_GET_CHANGES], CHANGED_STATION_BIT);
         transferBuffer[INST_GET_STATION] = station & 0x00FF;
+        // Indicate that a change has occured
+        changeOccured = true;
         interrupts();
       }
 
@@ -357,6 +383,16 @@ void loop()
    // Clear for the next measurement
    digitalWrite(STATION_TUNING_OUT_PIN, LOW);
    pinMode(STATION_TUNING_IN_PIN, OUTPUT);
+
+   // If a change has occured then pulse the front panel interrupt signal
+   // to indicate that a change has happened
+   //if (transferBuffer[INST_GET_CHANGES] & (1<<CHANGED_VOL_BIT)) {
+   if (changeOccured) {  
+     digitalWrite(FP_CHANGE_INTR, LOW);
+     delayMicroseconds(1);  // 1 microsecond pulse, longer than 7 clock cycles
+     digitalWrite(FP_CHANGE_INTR, HIGH);
+     changeOccured = false; 
+   }
 
    // Display the error code
    error(errorCode);

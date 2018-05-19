@@ -1,5 +1,5 @@
 /*
- *
+ *  NEED TO RETEST THIS FOR THE NON-SERCOM USE OF SPI (I:E: STANDARD ARUINO)
  * A ring buffer that is implemented to use an SPI based RAM such as the 23K256.
  * It uses the functions put() and get() to place bytes in the
  * buffer and retreive them respectively.
@@ -15,7 +15,6 @@
 #include <Arduino.h>
 #include <SPI.h>
 
-
 // SRAM instructions
 #define RDSR  0x05
 #define WRSR  0x01
@@ -29,7 +28,7 @@
 #define BYTE_MODE (0x00 | HOLD_DISABLE)
 
  // Clock speed 16 MHz
- #define RAMCLK 16000000
+#define RAMCLK 16000000
 
  // SPI setting for the RAM chip
  #define RAM_SPI_SETTING SPISettings(RAMCLK,  MSBFIRST, SPI_MODE0)
@@ -40,8 +39,7 @@ class SPIRingBuffer
     // Chip select pin
     uint8_t csPin;
 
-    // SPI interface
-    SPIClass spi;
+    SPIClass* spi;
 
     // Operation mode
     unsigned char operationMode;
@@ -56,10 +54,7 @@ class SPIRingBuffer
      *
      * @param state True to select. False to unselect
      */
-     void inline chipSelect(bool state)
-     {
-       digitalWrite(csPin, !state);
-     }
+     void chipSelect(bool state);
 
     /**
      * Set operation mode
@@ -67,6 +62,7 @@ class SPIRingBuffer
      * @param mode Operation mode
      */
     void setMode(char mode);
+
   public:
 
     // The length of the ring buffer (in bytes) is the size of the SPI RAM, i.e. 256Kbit = 32KByte
@@ -75,16 +71,34 @@ class SPIRingBuffer
     /**
      * Class constructor
      *
-     * param chipSelectPin The digital pin used a SPI slave select
+     * Params
+     *    chipSelectPin The digital pin used as SPI slave select
      */
     SPIRingBuffer(uint8_t chipSelectPin);
 
+    /**
+     *  Class constructor used when another a non-standard SPI is used (e.g. for
+     *  M0 when another SERCOM is used).
+     *
+     * Params
+     *  configuredSPI the SPIClass used (pointer to)
+     *  chipSelectPin The digital pin used as SPI slave select
+     */
+    SPIRingBuffer(SPIClass* configuredSPI, uint8_t chipSelectPin);
+
+    /**
+     *  Class destructor. Removes any created SPI objects and ends any open
+     *  SPI transactions.
+     */
+    ~SPIRingBuffer() ;
 
     /**
      *  Initialize the communication and indexes
      *
      */
      void begin(void);
+
+
 
      /**
       *  Initialize the indexes.

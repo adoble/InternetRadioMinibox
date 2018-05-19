@@ -2,17 +2,26 @@
   Basic library for the VS1053.
 
   This is stripped down version of the original  Adafruit VS1053 library
-  written by Limor Fried/Ladyada for Adafruit Industries. SD card
-  functionality has been removed.
+  written by Limor Fried/Ladyada for Adafruit Industries. The following
+  functionality has been removed:
+    - SD card functionality.
+    - Hardware SPI pins. Assuming that in modern boards this is not going
+      to be used.
+
+  In addtion the following has been added:
+    - For M0 based designs that use different SERCOMs for SPI a new
+      constructor that specifies the configured SPI class to be used.
 
 
   -- Original text from  the Adafruit library -->
+
   Adafruit invests time and resources providing this open source code,
   please support Adafruit and open-source hardware by purchasing
   products from Adafruit!
 
   Written by Limor Fried/Ladyada for Adafruit Industries.
   BSD license, all text above must be included in any redistribution
+
   <-- End original text
  ****************************************************/
 
@@ -34,46 +43,47 @@
 //#define VS1053_DATA_SPI_SETTING     SPISettings(1700000, MSBFIRST, SPI_MODE0)
 
 
-
-
 /* VS1053 'low level' interface */
 static volatile PortReg *clkportreg, *misoportreg, *mosiportreg;
 static PortMask clkpin, misopin, mosipin;
 
-// DOBLE COMMENTING THIS OUT. Give compiler errors and is not used
-// as using the hardware defined  SPI pins for this
-/*
-Lemon_VS1053::Lemon_VS1053(int8_t mosi, int8_t miso, int8_t clk,
-			   int8_t rst, int8_t cs, int8_t dcs, int8_t dreq) {
-  _mosi = mosi;
-  _miso = miso;
-  _clk = clk;
+
+Lemon_VS1053::Lemon_VS1053(SPIClass *configuredSPI, int8_t rst, int8_t cs, int8_t dcs, int8_t dreq) {
+  _mosi = 0;
+  _miso = 0;
+  _clk = 0;
+  useHardwareSPI = true;
+  useConfiguredSPI = true;
   _reset = rst;
   _cs = cs;
   _dcs = dcs;
   _dreq = dreq;
 
-  useHardwareSPI = false;
+  spi = configuredSPI;  // Repace the standard one with the configured one
 
-  clkportreg = portOutputRegister(digitalPinToPort(_clk));
-  clkpin = digitalPinToBitMask(_clk);
-  misoportreg = portInputRegister(digitalPinToPort(_miso));
-  misopin = digitalPinToBitMask(_miso);
-  mosiportreg = portOutputRegister(digitalPinToPort(_mosi));
-  mosipin = digitalPinToBitMask(_mosi);
 }
-*/
 
 Lemon_VS1053::Lemon_VS1053(int8_t rst, int8_t cs, int8_t dcs, int8_t dreq) {
   _mosi = 0;
   _miso = 0;
   _clk = 0;
   useHardwareSPI = true;
+  useConfiguredSPI = false;
   _reset = rst;
   _cs = cs;
   _dcs = dcs;
   _dreq = dreq;
+
+  // SPI interface
+  #if defined(ARDUINO_SAMD_ZERO)
+    // Required for Serial on Zero based boards
+    spi = new SPIClass(&sercom4, 22, 24, 23, SPI_PAD_2_SCK_3, SERCOM_RX_PAD_0);
+  #else
+    spi = &SPI;
+  #endif
+
 }
+
 
 
 void Lemon_VS1053::applyPatch(const uint16_t *patch, uint16_t patchsize) {
@@ -113,7 +123,7 @@ boolean Lemon_VS1053::readyForData(void) {
 
 void Lemon_VS1053::playData(uint8_t *buffer, uint8_t buffsiz) {
   #ifdef SPI_HAS_TRANSACTION
-  if (useHardwareSPI) SPI.beginTransaction(VS1053_DATA_SPI_SETTING);
+  if (useHardwareSPI) spi->beginTransaction(VS1053_DATA_SPI_SETTING);
   #endif
   digitalWrite(_dcs, LOW);
   for (uint8_t i=0; i<buffsiz; i++) {
@@ -121,7 +131,7 @@ void Lemon_VS1053::playData(uint8_t *buffer, uint8_t buffsiz) {
   }
   digitalWrite(_dcs, HIGH);
   #ifdef SPI_HAS_TRANSACTION
-  if (useHardwareSPI) SPI.endTransaction();
+  if (useHardwareSPI) spi->endTransaction();
   #endif
 }
 
@@ -169,7 +179,7 @@ void Lemon_VS1053::setTone(int tone) {
     sci_bass_value |= bass;
     sci_bass_value <<= 4;
     sci_bass_value |= 0xA;  // Bass boot under 100 Hz
-    
+
 
    // Send the SCI command
    noInterrupts(); //cli();
@@ -220,6 +230,7 @@ uint8_t Lemon_VS1053::begin(void) {
 
   pinMode(_cs, OUTPUT);
   digitalWrite(_cs, HIGH);
+
   pinMode(_dcs, OUTPUT);
   digitalWrite(_dcs, HIGH);
   pinMode(_dreq, INPUT);
@@ -229,16 +240,19 @@ uint8_t Lemon_VS1053::begin(void) {
     pinMode(_clk, OUTPUT);
     pinMode(_miso, INPUT);
   } else {
-    SPI.begin();
-    SPI.setDataMode(SPI_MODE0);   //REDUNDANT ? Already in SPISettings
-    SPI.setBitOrder(MSBFIRST);    //REDUNDANT ? Already in SPISettings
-    SPI.setClockDivider(SPI_CLOCK_DIV128);
+    if (!useConfiguredSPI) {
+      spi->begin();  // Alread initaliised when configuring the SPI using another SERCOM
+      //spi->setDataMode(SPI_MODE0);   //REDUNDANT ? Already in SPISettings
+      //spi->setBitOrder(MSBFIRST);    //REDUNDANT ? Already in SPISettings
+      //spi->setClockDivider(SPI_CLOCK_DIV128);
+    }
   }
 
   reset();
 
   // Make sure that the VS1053 board is set into MP3 mode
   //setMP3Mode();
+  //Serial.print("REG STATUS ");Serial.println(sciRead(VS1053_REG_STATUS));   // DEBUG
 
   return (sciRead(VS1053_REG_STATUS) >> 4) & 0x0F;
 }
@@ -322,7 +336,7 @@ uint16_t Lemon_VS1053::sciRead(uint8_t addr) {
   uint16_t data;
 
   #ifdef SPI_HAS_TRANSACTION
-  if (useHardwareSPI) SPI.beginTransaction(VS1053_CONTROL_SPI_SETTING);
+  if (useHardwareSPI) spi->beginTransaction(VS1053_CONTROL_SPI_SETTING);
   #endif
   digitalWrite(_cs, LOW);
   spiwrite(VS1053_SCI_READ);
@@ -333,7 +347,7 @@ uint16_t Lemon_VS1053::sciRead(uint8_t addr) {
   data |= spiread();
   digitalWrite(_cs, HIGH);
   #ifdef SPI_HAS_TRANSACTION
-  if (useHardwareSPI) SPI.endTransaction();
+  if (useHardwareSPI) spi->endTransaction();
   #endif
 
   return data;
@@ -342,7 +356,7 @@ uint16_t Lemon_VS1053::sciRead(uint8_t addr) {
 
 void Lemon_VS1053::sciWrite(uint8_t addr, uint16_t data) {
   #ifdef SPI_HAS_TRANSACTION
-  if (useHardwareSPI) SPI.beginTransaction(VS1053_CONTROL_SPI_SETTING);
+  if (useHardwareSPI) spi->beginTransaction(VS1053_CONTROL_SPI_SETTING);
   #endif
   digitalWrite(_cs, LOW);
   spiwrite(VS1053_SCI_WRITE);
@@ -351,7 +365,7 @@ void Lemon_VS1053::sciWrite(uint8_t addr, uint16_t data) {
   spiwrite(data & 0xFF);
   digitalWrite(_cs, HIGH);
   #ifdef SPI_HAS_TRANSACTION
-  if (useHardwareSPI) SPI.endTransaction();
+  if (useHardwareSPI) spi->endTransaction();
   #endif
 }
 
@@ -366,7 +380,7 @@ uint8_t Lemon_VS1053::spiread(void)
   // Make sure clock starts low
 
   if (useHardwareSPI) {
-    x = SPI.transfer(0x00);
+    x = spi->transfer(0x00);
   } else {
     for (i=7; i>=0; i--) {
       if ((*misoportreg) & misopin)
@@ -387,7 +401,7 @@ void Lemon_VS1053::spiwrite(uint8_t c)
   // Make sure clock starts low
 
   if (useHardwareSPI) {
-    SPI.transfer(c);
+    spi->transfer(c);
 
   } else {
     for (int8_t i=7; i>=0; i--) {
@@ -418,7 +432,7 @@ void Lemon_VS1053::sineTest(uint8_t n, uint16_t ms) {
 	   delay(10);
 
   #ifdef SPI_HAS_TRANSACTION
-  if (useHardwareSPI) SPI.beginTransaction(VS1053_DATA_SPI_SETTING);
+  if (useHardwareSPI) spi->beginTransaction(VS1053_DATA_SPI_SETTING);
   #endif
 
 
@@ -433,14 +447,13 @@ void Lemon_VS1053::sineTest(uint8_t n, uint16_t ms) {
   spiwrite(0x00);
   digitalWrite(_dcs, HIGH);
   #ifdef SPI_HAS_TRANSACTION
-  if (useHardwareSPI) SPI.endTransaction();
+  if (useHardwareSPI) spi->endTransaction();
   #endif
 
   delay(ms);
 
   #ifdef SPI_HAS_TRANSACTION
-  if (useHardwareSPI) SPI.beginTransaction(VS1053_DATA_SPI_SETTING);
-  Serial.println("HERE3");
+  if (useHardwareSPI) spi->beginTransaction(VS1053_DATA_SPI_SETTING);
   #endif
 
   digitalWrite(_dcs, LOW);
@@ -454,6 +467,6 @@ void Lemon_VS1053::sineTest(uint8_t n, uint16_t ms) {
   spiwrite(0x00);
   digitalWrite(_dcs, HIGH);
   #ifdef SPI_HAS_TRANSACTION
-  if (useHardwareSPI) SPI.endTransaction();
+  if (useHardwareSPI) spi->endTransaction();
   #endif
 }

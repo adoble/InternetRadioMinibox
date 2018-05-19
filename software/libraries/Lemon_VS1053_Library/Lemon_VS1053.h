@@ -31,7 +31,6 @@
 
 #include <SPI.h>
 
-
 #ifdef __SAM3X8E__
 typedef volatile RwReg PortReg;
 typedef uint32_t PortMask;
@@ -90,9 +89,33 @@ typedef uint8_t PortMask;
 
 class Lemon_VS1053 {
  public:
-  Lemon_VS1053(int8_t mosi, int8_t miso, int8_t clk,
-		  int8_t rst, int8_t cs, int8_t dcs, int8_t dreq);
+  //Lemon_VS1053(int8_t mosi, int8_t miso, int8_t clk,
+	//	  int8_t rst, int8_t cs, int8_t dcs, int8_t dreq);
+
+  /**
+   *  Constructor to define pins used
+   *  Params:
+   *  rst  Reset
+   *  cs   Command chip select
+   *  dcs  Data chip select
+   *  dreq Request data (ie. ready for data)
+   */
   Lemon_VS1053(int8_t rst, int8_t cs, int8_t dcs, int8_t dreq);
+
+  /**
+   *  Constructor to define pins used and a configured SPI object.
+   * This can be used for M0 based designs in which the SPI pins use a
+   *   different SERCOM.
+   *
+   *  Params:
+   *  configuredSPI (Pointer to) The SPI object using a different SERCOM
+   *  rst           Reset
+   *  cs            Command chip select
+   *  dcs           Data chip select
+   *  dreq          Request data (ie. ready for data)
+   */
+  Lemon_VS1053(SPIClass* configuredSPI, int8_t rst, int8_t cs, int8_t dcs, int8_t dreq);
+
   uint8_t begin(void);
   void reset(void);
   void softReset(void);
@@ -104,7 +127,7 @@ class Lemon_VS1053 {
 
   uint16_t decodeTime(void);
   void setVolume(uint8_t left, uint8_t right);
-  void setTone(int tone); 
+  void setTone(int tone);
   void dumpRegs(void);
 
   void playData(uint8_t *buffer, uint8_t buffsiz);
@@ -127,6 +150,12 @@ class Lemon_VS1053 {
  private:
   int8_t _mosi, _miso, _clk, _reset, _cs, _dcs;
   boolean useHardwareSPI;
+  boolean useConfiguredSPI;
+
+  // SPI interface
+  SPIClass* spi;
+
+
 };
 
 
