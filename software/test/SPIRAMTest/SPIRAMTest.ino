@@ -17,7 +17,10 @@ SPIClass *spi;
 //SPIClass spi(&sercom1, 12, 13, 11, SPI_PAD_0_SCK_1, SERCOM_RX_PAD_3);
 
 //SPISettings spiSettings(16000000, MSBFIRST, SPI_MODE0);   // NOT OK
-  SPISettings spiSettings(8000000, MSBFIRST, SPI_MODE0);  // OK
+// SPISettings spiSettings(8000000, MSBFIRST, SPI_MODE0);  // OK
+ SPISettings spiSettings(100000, MSBFIRST, SPI_MODE0);  // OK
+
+
 // SPISettings spiSettings(1000000, MSBFIRST, SPI_MODE0);  //OK
 // SPISettings spiSettings(1200000, MSBFIRST, SPI_MODE0);  //OK
 // SPISettings spiSettings(1400000, MSBFIRST, SPI_MODE0);    //OK
@@ -50,13 +53,13 @@ void setup() {
 
   pinMode(RAM_CS, OUTPUT);
 
-  // Make sure other chsip selects are high
+  // Make sure other chip selects are high
   pinMode(FP_CONTROLLER_CS, OUTPUT); 
   pinMode(XDCS, OUTPUT); 
   pinMode(XCS, OUTPUT); 
   digitalWrite(FP_CONTROLLER_CS, HIGH);
 
-   // Pulling the folling high causes incorrect reads, don't know why  --->  FIXME
+   // Pulling the following high causes incorrect reads, don't know why  --->  FIXME
   digitalWrite(XDCS, HIGH); //!!!!!!!!
   digitalWrite(XCS, HIGH); 
 
@@ -74,11 +77,12 @@ void setup() {
     // Set mode
   setMode(BYTE_MODE);
 
-  initMem();
+  //initMem();
 
 }
 
-uint8_t i=0;
+uint8_t addr=0;
+
 void loop() {
   //Serial.println(i);
   //mySPI.beginTransaction(SPISettings(8000000, MSBFIRST, SPI_MODE0));
@@ -86,19 +90,21 @@ void loop() {
 
 
   delayMicroseconds(50);
-  unsigned int address = B00001111;
+  //unsigned int address = B00001111;
   unsigned char  testVal = B1010100;
-  writeByte(address, testVal);
 
-  //delayMicroseconds(1);
+  
+  writeByte(addr, testVal);
+
+  delayMicroseconds(10);
 
   unsigned char val = 0;
-  val = readByte(address);
+  val = readByte(addr);
 
   if (val != testVal) testOK = false;
 
   delay(3);
-  Serial.print(testId, 10);
+  Serial.print(addr, 10);
   Serial.print("   ");
   Serial.print(testVal, BIN);
   Serial.print(":");
@@ -107,7 +113,9 @@ void loop() {
   Serial.print(testOK?"":  "  Incorrect test was previously detected.");
   Serial.println();
 
-  testId++; 
+  addr++;
+  if (addr >= 256*1024) addr = 0; 
+
   
 
     //mySPI.transfer(i++);
@@ -185,5 +193,9 @@ unsigned char readByte(unsigned int address)
 
 void  chipSelect(bool state)
  {
-   digitalWrite(RAM_CS, !state);
+   if (state) {
+    digitalWrite(RAM_CS, LOW);
+   } else {
+    digitalWrite(RAM_CS, HIGH);
+   }
  }
