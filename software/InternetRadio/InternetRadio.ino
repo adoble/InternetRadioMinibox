@@ -6,7 +6,7 @@
 *      Adafruit Feather M0 WiFi with ATWINC1500 (processor ARM Cortex M0+)
 *      with Arduino bootloader
 *    - reads the mp3 data stream
-*    - buffers the data in an external SPI controlled RAM
+*    - buffers the data in internal RAM
 *    - transfers it to the VS1053 so that it can decode the mp3 data into
 *      an audio signal.
 *    In addition it reads front panel settings  (volume and station) from
@@ -24,7 +24,7 @@
 *
 * Created Libaries (for the project)
 * ==================================
-* SPIRingBuffer     - A ring buffer that is implemented to use an SPI based 23K256 RAM.
+* StreamingBuffer   - A ring buffer that uses the internal RAM. 
 *                     This is used to buffer the data to that sproadic gaps in the internet connection
 *                     are "smoothed out".
 * Lemon_VS1053      - A local library to control the VS1053
@@ -38,7 +38,7 @@
 #include <SPI.h>
 #include "wiring_private.h" // pinPeripheral() function
 #include "Lemon_VS1053.h"
-#include "SPIRingBuffer.h"
+#include "StreamingBuffer.h"
 
 #include "credentials.h"
 
@@ -52,13 +52,13 @@ const int XDCS = A2;  // Used as digital pin
 const int XCS = 6;
 
 // Pin setup for the RAM (ring buffer)
-const int RAMCS = A4;  // Used as digital pin
+//const int RAMCS = A4;  // Used as digital pin
 
 // Pin setup for the front panel controller
 const int FPCS = A5;  // Used as digital pin
 
 // Interrupt signalling pin that the front panel controller has detected a change
-const int FP_CHANGE_INTR= 5; 
+const int FP_CHANGE_INTR= 5;
 
 // Front panel controller instruction codes
 // TODO move these into a header file
@@ -75,24 +75,24 @@ const byte CHANGED_VOL_BIT     = 0;     // The volume has changed
 const byte CHANGED_STATION_BIT = 1;     // A new station has been selected
 
 // Set up the SPI on SERCOM1. Not using the standard SPI pins as these are
-// connected to the WLAN module and this SPI  bus is very chatty
+// connected to the WLAN module and this SPI bus is very chatty
 SPIClass spi(&sercom1, 12, 13, 11, SPI_PAD_0_SCK_1, SERCOM_RX_PAD_3);
 
-// Set up the external RAM as a ring buffer
-SPIRingBuffer ringBuffer(&spi, RAMCS);
+// Set up the internal RAM as a ring buffer
+const int STREAMING_BUFFER_SIZE = 20480; // 20K
+uint8_t streamingBufferStorage[STREAMING_BUFFER_SIZE];
+
+StreamingBuffer streamingBuffer(streamingBufferStorage, STREAMING_BUFFER_SIZE);
+// Flag to ensure that the ring buffer is fully loaded on startup
+bool bufferInitialized = false;
+// The threshold at which the buffer will be loaded at a faster rate (i.e. to catch up).
+const int THRESHOLD = STREAMING_BUFFER_SIZE / 5;   // 20%
+// The skip flag to allow the buffer to catch up
+int skip = 0;
 
 // Setup the VS1053 Lemon player using standard hardware SPI pins and the
 // pin for the command chip select (XCS)
 Lemon_VS1053 player = Lemon_VS1053(&spi, XRST, XCS, XDCS, DREQ);
-
-// Flag to ensure that the ring buffer is fully loaded on startup
-bool bufferInitialized = false;
-
-// The threshold at which the buffer will be loaded at a faster rate (i.e. to catch up).
-const int THRESHOLD = ringBuffer.RING_BUFFER_LENGTH / 5;   // 20%
-
-// The skip flag to allow the buffer to catch up
-int skip = 0;
 
 volatile int checkControlStatus = 0;
 
@@ -176,7 +176,7 @@ void setup() {
 
   while (!Serial)   ; // wait for serial port to connect. Needed for native USB port only
   Serial.begin(115200);
-   
+
   // So we know what version we are running
   // TODO review this in light of using Git
   Serial.println(programName);
@@ -191,22 +191,24 @@ void setup() {
   digitalWrite(XCS, HIGH);
   pinMode(XDCS, OUTPUT);
   digitalWrite(XDCS, HIGH);
-  pinMode(RAMCS, OUTPUT);
-  digitalWrite(RAMCS, HIGH);
+  //pinMode(RAMCS, OUTPUT);
+  //digitalWrite(RAMCS, HIGH);
 
-  
+
   // Assign pins 11, 12, 13 to SERCOM functionality
   // TODO Symbolic names for the pins
   pinPeripheral(11, PIO_SERCOM);
   pinPeripheral(12, PIO_SERCOM);
   pinPeripheral(13, PIO_SERCOM);
-  
+
   delay(50);
 
   Serial.println("Init ring buffer");
 
+  
+
   // Initialise the ring buffer
-  ringBuffer.begin();   //TODO is the buffer too long, resulting in too long a delay?
+  streamingBuffer.begin();   //TODO is the buffer too long, resulting in too long a delay?
 
 
   Serial.println("Init player");
@@ -223,13 +225,13 @@ void setup() {
   while (!player.readyForData()) {}
   player.setMP3Mode();
   Serial.println("MP3 Mode set.");
-  
+
   // Set the initial volume by reading from the front panel controller
   while (!player.readyForData()) { }
   Serial.println("Volume setting to 70");
   player.setVolume(70,70);  // Higher is quieter.
   //adjustVolume();   //TODO provide a way for the FP controller to say that data is ready and that can work when it is disconnected
-  
+
     // Setup the interrupt for changes to the controls
     attachInterrupt(digitalPinToInterrupt(FP_CHANGE_INTR), changeISR, FALLING);
 
@@ -256,16 +258,16 @@ void setup() {
       String host = getHostFromURL(currentStation);
       String path = getPathFromURL(currentStation);
 
-      Serial.print("Host:"); Serial.println(host); 
-      Serial.print("Path:"); Serial.println(path); 
+      Serial.print("Host:"); Serial.println(host);
+      Serial.print("Path:"); Serial.println(path);
 
       // Configure server and url
       HttpClient http = HttpClient(wifiClient, host);
-      
+
       Serial.print("[HTTP] GET...\n");
       // start connection and send HTTP header
       http.get(path);
-      
+
       int httpCode = http.responseStatusCode();
       if(httpCode > 0) {
           // HTTP header has been sent and server response header has been handled
@@ -306,7 +308,7 @@ void loop() {
   if (!bufferInitialized) {
     // Load up the buffer
     //nBytes = stream->available();
-    nBytes = wifiClient.available();   
+    nBytes = wifiClient.available();
     if (nBytes) {
       // read in chunks of up to 32 bytes
 
@@ -316,15 +318,16 @@ void loop() {
       //      >=DATABUFFERLEN   <=DATABUFFERLEN        nBytes
       //      <DATABUFFERLEN          -                availableSpace
 
-      if (ringBuffer.availableSpace() < DATABUFFERLEN) maxBytesToRead = ringBuffer.availableSpace();
+      if (streamingBuffer.availableSpace() < DATABUFFERLEN) maxBytesToRead = streamingBuffer.availableSpace();
       else maxBytesToRead = (nBytes> DATABUFFERLEN ? DATABUFFERLEN : nBytes);
       nRead = wifiClient.read(mp3Buffer, maxBytesToRead);   // Assuming that this exists (undocumented) in the WiFI101 library
       // Transfer to buffer
       for (int i = 0; i < nRead; i++) {
-        ringBuffer.put(mp3Buffer[i]);
+        streamingBuffer.put(mp3Buffer[i]);
       }
-      if (ringBuffer.availableSpace() == 0)  {
+      if (streamingBuffer.availableSpace() == 0)  {
           bufferInitialized = true;
+          //Serial.print("Buffer initialised with ");Serial.print(streamingBuffer.availableData());Serial.println(" bytes.");
       }
     }
 
@@ -338,7 +341,7 @@ void loop() {
   //    yes: no-op
   //
   if (bufferInitialized) {
-    if (ringBuffer.availableSpace() > DATABUFFERLEN) {
+    if (streamingBuffer.availableSpace() > DATABUFFERLEN) {
       //nBytes = stream->available();
       nBytes = wifiClient.available();
       if (nBytes) {
@@ -346,7 +349,7 @@ void loop() {
         nRead = wifiClient.read(mp3Buffer, (nBytes> DATABUFFERLEN ? DATABUFFERLEN : nBytes));  // Assuming that this exists (undocumented) in the WiFI101 library
         // Transfer to buffer
         for (int i = 0; i < nRead; i++) {
-          ringBuffer.put(mp3Buffer[i]);
+          streamingBuffer.put(mp3Buffer[i]);
         }
       }
     }
@@ -360,7 +363,7 @@ void loop() {
 
     unsigned int changes = getChanges();
     if (changes &  (1 << CHANGED_VOL_BIT)) {
-      adjustVolume();
+      //adjustVolume();
     }
     if (changes &  (1 << CHANGED_STATION_BIT)) {
       // TODO Change station.
@@ -374,7 +377,7 @@ void loop() {
 
   // Skip a transfer to the VS1053 to give the buffer a chance to reload if
   //  the data amount has fallen below THRESHOLD
-  skip = ((bufferInitialized && (ringBuffer.availableData() < THRESHOLD)) ? (skip++)%2 : 0);
+  skip = ((bufferInitialized && (streamingBuffer.availableData() < THRESHOLD)) ? (skip++)%2 : 0);
 
   // Moving data to VS1053
   // does VS1053 accept data? and not skip?
@@ -386,9 +389,9 @@ void loop() {
   if (bufferInitialized  && !skip) {
       // Transfer to VS1053
       if (player.readyForData()) {
-        nRead = (ringBuffer.availableData() > DATABUFFERLEN ? DATABUFFERLEN : ringBuffer.availableData());
+        nRead = (streamingBuffer.availableData() > DATABUFFERLEN ? DATABUFFERLEN : streamingBuffer.availableData());
         for (int i= 0; i < nRead; i++) {
-          mp3Buffer[i] = ringBuffer.get();
+          mp3Buffer[i] = streamingBuffer.get();
         }
         player.playData(mp3Buffer, nRead);
       }
@@ -528,19 +531,19 @@ unsigned int getChanges() {
 
 
 String getHostFromURL(String url) {
-  int startPos; 
+  int startPos;
   int endPos;
-  
+
   // Skip past any protocol specification. Assuming that is http:// or is not specified
   if (url.startsWith("http://")) {
     startPos = 7;
   } else {
     startPos = 0;
-  }    
- 
+  }
+
   endPos = url.indexOf('/', startPos);
   // Extract the host name
-  return url.substring(startPos, endPos); 
+  return url.substring(startPos, endPos);
 }
 
 String getPathFromURL(String url) {
@@ -552,12 +555,12 @@ String getPathFromURL(String url) {
     startPos = 7;
   } else {
     startPos = 0;
-  }   
+  }
 
   // Now extract the path
   startPos = url.indexOf('/', startPos);
   return url.substring(startPos);
-  
+
 }
 
 // Set the VS1053 chip into MP3 mode
