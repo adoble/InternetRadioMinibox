@@ -2,5 +2,5 @@
 // and CHANGE the file name to
 //            credentials.h
 
-#define WIFI_SSID "WLAN-8M6NUC"
-#define WIFI_PWD "1721038463010079"
+#define WIFI_SSID "YOUR WLAN SSID HERE"
+#define WIFI_PWD "YOUR WLAN PASSWORD HERE"

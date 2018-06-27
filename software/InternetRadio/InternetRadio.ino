@@ -60,6 +60,10 @@ const int FPCS = A5;  // Used as digital pin
 // Interrupt signalling pin that the front panel controller has detected a change
 const int FP_CHANGE_INTR= 5;
 
+// Test pins
+const int TEST_PIN_D = 10;
+const int TEST_PIN_A = A0;
+
 // Front panel controller instruction codes
 // TODO move these into a header file
 const byte INST_NULL          = 0x00;
@@ -79,7 +83,7 @@ const byte CHANGED_STATION_BIT = 1;     // A new station has been selected
 SPIClass spi(&sercom1, 12, 13, 11, SPI_PAD_0_SCK_1, SERCOM_RX_PAD_3);
 
 // Set up the internal RAM as a ring buffer
-const int STREAMING_BUFFER_SIZE = 20480; // 20K
+const int STREAMING_BUFFER_SIZE = 20000; // NEED TO INCREASE
 uint8_t streamingBufferStorage[STREAMING_BUFFER_SIZE];
 
 StreamingBuffer streamingBuffer(streamingBufferStorage, STREAMING_BUFFER_SIZE);
@@ -182,8 +186,11 @@ void setup() {
   Serial.println(programName);
   Serial.println();
 
-
-
+  // Set up the test pins 
+  pinMode(TEST_PIN_D, OUTPUT); 
+  digitalWrite(TEST_PIN_D, LOW); 
+  pinMode(TEST_PIN_A, OUTPUT); 
+  analogWrite(TEST_PIN_A, 0);
 
   // Before initialising using the libraries make sure that the CS pins are
   // in the right state
@@ -205,19 +212,20 @@ void setup() {
 
   Serial.println("Init ring buffer");
 
-  
-
   // Initialise the ring buffer
   streamingBuffer.begin();   //TODO is the buffer too long, resulting in too long a delay?
 
 
   Serial.println("Init player");
+  delay(10);
 
   // Initialize the player
-  if ( !player.begin()) { // initialise the player
-     Serial.println("Error in player init!");
-     player.dumpRegs();
-  }
+//  if ( !player.begin()) { // initialise the player
+//     Serial.println("Error in player init!");
+//     player.dumpRegs();
+//  }
+
+  player.begin();
 
 
   // Make sure the VS1053 is in MP3 mode.
@@ -228,8 +236,8 @@ void setup() {
 
   // Set the initial volume by reading from the front panel controller
   while (!player.readyForData()) { }
-  Serial.println("Volume setting to 70");
-  player.setVolume(70,70);  // Higher is quieter.
+  Serial.println("Volume setting to 60");
+  player.setVolume(60,60);  // Higher is quieter.
   //adjustVolume();   //TODO provide a way for the FP controller to say that data is ready and that can work when it is disconnected
 
     // Setup the interrupt for changes to the controls
@@ -305,6 +313,10 @@ void loop() {
   int nRead = 0;
   int maxBytesToRead;
 
+  //TEST write the sife of the bufer to the analog pin
+  //analogWrite(TEST_PIN_A,  (streamingBuffer.availableData() / STREAMING_BUFFER_SIZE)*255);
+  //Serial.print("B DATA: "); Serial.println(streamingBuffer.availableData());
+
   if (!bufferInitialized) {
     // Load up the buffer
     //nBytes = stream->available();
@@ -327,7 +339,7 @@ void loop() {
       }
       if (streamingBuffer.availableSpace() == 0)  {
           bufferInitialized = true;
-          //Serial.print("Buffer initialised with ");Serial.print(streamingBuffer.availableData());Serial.println(" bytes.");
+          Serial.print("Buffer initialised with ");Serial.print(streamingBuffer.availableData());Serial.println(" bytes.");
       }
     }
 
@@ -348,8 +360,10 @@ void loop() {
         // read up to 32 bytes
         nRead = wifiClient.read(mp3Buffer, (nBytes> DATABUFFERLEN ? DATABUFFERLEN : nBytes));  // Assuming that this exists (undocumented) in the WiFI101 library
         // Transfer to buffer
+        pulseTestPin();
         for (int i = 0; i < nRead; i++) {
           streamingBuffer.put(mp3Buffer[i]);
+          
         }
       }
     }
@@ -407,18 +421,30 @@ void loop() {
 
 /* Connect to the wireless LAN */
 void connectWLAN(const char* ssid, const char* password) {
+   const int maxAttempts = 30;
+   int nAttempts = 0;
+     
    Serial.println("Connecting to WLAN ...");
    //WiFi.mode(WIFI_STA);  //ESP8266
    WiFi.begin(ssid, password);
-   while((WiFi.status() != WL_CONNECTED)) {
+   while((WiFi.status() != WL_CONNECTED && (nAttempts < maxAttempts))) {
      delay(500);
      Serial.print(".");
+     nAttempts++;
    }
+   
    Serial.println();
-   Serial.println("Connected to WIFI AP");
-   Serial.print("IP Address: ");
-   Serial.println(WiFi.localIP());
-
+   if (WiFi.status() == WL_CONNECTED ) {
+     // Connection successful
+     Serial.println("Connected to WIFI AP");
+     Serial.print("IP Address: ");
+     Serial.println(WiFi.localIP());
+   } else {
+     //Connection unsuccessful
+     Serial.println("Could not connect to WIFI AP. Disconnecting.");
+     WiFi.disconnect();
+   }
+   
 }
 
 
@@ -562,6 +588,15 @@ String getPathFromURL(String url) {
   return url.substring(startPos);
 
 }
+
+void pulseTestPin() {
+  digitalWrite(TEST_PIN_D, HIGH);
+  delayMicroseconds(1);
+  digitalWrite(TEST_PIN_D, LOW);
+   
+}
+
+
 
 // Set the VS1053 chip into MP3 mode
 //void set_mp3_mode()
