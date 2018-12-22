@@ -178,7 +178,7 @@ void setup() {
 
   //Configure pins for Adafruit ATWINC1500 Feather
 
-  while (!Serial)   ; // wait for serial port to connect. Needed for native USB port only
+  //while (!Serial)   ; // wait for serial port to connect. Needed for native USB port only
   Serial.begin(115200);
 
   // So we know what version we are running
@@ -217,15 +217,22 @@ void setup() {
 
 
   Serial.println("Init player");
-  delay(10);
+  delay(100);
 
   // Initialize the player
-//  if ( !player.begin()) { // initialise the player
-//     Serial.println("Error in player init!");
-//     player.dumpRegs();
-//  }
+  int nTries = 0; 
+  while ( !player.begin() && nTries < 20) { // initialise the player
+    delay(1000);
+    Serial.println("Error in player init!");
+       digitalWrite(TEST_PIN_D, HIGH);
+     player.dumpRegs();
+     nTries++;
+       
+     
+  }
+  
 
-  player.begin();
+ // player.begin();
 
 
   // Make sure the VS1053 is in MP3 mode.
@@ -360,7 +367,6 @@ void loop() {
         // read up to 32 bytes
         nRead = wifiClient.read(mp3Buffer, (nBytes> DATABUFFERLEN ? DATABUFFERLEN : nBytes));  // Assuming that this exists (undocumented) in the WiFI101 library
         // Transfer to buffer
-        pulseTestPin();
         for (int i = 0; i < nRead; i++) {
           streamingBuffer.put(mp3Buffer[i]);
           
@@ -376,8 +382,9 @@ void loop() {
     //player.setTone(toneControl);  // TODO experiment with the best tone setting and place in setup()
 
     unsigned int changes = getChanges();
+    //Serial.println(changes, BIN) ;
     if (changes &  (1 << CHANGED_VOL_BIT)) {
-      //adjustVolume();
+      adjustVolume();
     }
     if (changes &  (1 << CHANGED_STATION_BIT)) {
       // TODO Change station.

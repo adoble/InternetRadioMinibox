@@ -228,7 +228,7 @@ void setup (void)
   bitSet(transferBuffer[INST_GET_CHANGES], CHANGED_VOL_BIT);
   bitSet(transferBuffer[INST_GET_CHANGES], CHANGED_STATION_BIT);
 
-
+  Serial.println(transferBuffer[INST_GET_CHANGES], BIN);
 }  // end of setup
 
 
@@ -311,7 +311,7 @@ void loop()
 {
 
   int lowest, highest;   // Range of noisy measurements of the variable cap.
-Serial.print("INST:"); Serial.println(instruction, OCT);
+
    if (processInstruction)
     {
       if (instruction == INST_NULL) {
