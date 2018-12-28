@@ -104,8 +104,8 @@ class Lemon_VS1053 {
 
   /**
    *  Constructor to define pins used and a configured SPI object.
-   * This can be used for M0 based designs in which the SPI pins use a
-   *   different SERCOM.
+   *  This can be used for M0 based designs in which the SPI pins use a
+   *  different SERCOM.
    *
    *  Params:
    *  configuredSPI (Pointer to) The SPI object using a different SERCOM
