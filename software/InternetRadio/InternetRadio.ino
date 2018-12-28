@@ -24,7 +24,7 @@
 *
 * Created Libaries (for the project)
 * ==================================
-* StreamingBuffer   - A ring buffer that uses the internal RAM. 
+* StreamingBuffer   - A ring buffer that uses the internal RAM.
 *                     This is used to buffer the data to that sproadic gaps in the internet connection
 *                     are "smoothed out".
 * Lemon_VS1053      - A local library to control the VS1053
@@ -79,7 +79,11 @@ const byte CHANGED_VOL_BIT     = 0;     // The volume has changed
 const byte CHANGED_STATION_BIT = 1;     // A new station has been selected
 
 // Set up the SPI on SERCOM1. Not using the standard SPI pins as these are
-// connected to the WLAN module and this SPI bus is very chatty
+// connected to the WLAN module and this SPI bus is very chatty. The following
+// assigns pins as follows:
+//     SCK on Digital 13
+//     MISO on Digital 12
+//     MOSI on Digital 11
 SPIClass spi(&sercom1, 12, 13, 11, SPI_PAD_0_SCK_1, SERCOM_RX_PAD_3);
 
 // Set up the internal RAM as a ring buffer
@@ -186,10 +190,10 @@ void setup() {
   Serial.println(programName);
   Serial.println();
 
-  // Set up the test pins 
-  pinMode(TEST_PIN_D, OUTPUT); 
-  digitalWrite(TEST_PIN_D, LOW); 
-  pinMode(TEST_PIN_A, OUTPUT); 
+  // Set up the test pins
+  pinMode(TEST_PIN_D, OUTPUT);
+  digitalWrite(TEST_PIN_D, LOW);
+  pinMode(TEST_PIN_A, OUTPUT);
   analogWrite(TEST_PIN_A, 0);
 
   // Before initialising using the libraries make sure that the CS pins are
@@ -220,17 +224,17 @@ void setup() {
   delay(100);
 
   // Initialize the player
-  int nTries = 0; 
+  int nTries = 0;
   while ( !player.begin() && nTries < 20) { // initialise the player
     delay(1000);
     Serial.println("Error in player init!");
        digitalWrite(TEST_PIN_D, HIGH);
      player.dumpRegs();
      nTries++;
-       
-     
+
+
   }
-  
+
 
  // player.begin();
 
@@ -369,7 +373,7 @@ void loop() {
         // Transfer to buffer
         for (int i = 0; i < nRead; i++) {
           streamingBuffer.put(mp3Buffer[i]);
-          
+
         }
       }
     }
@@ -430,7 +434,7 @@ void loop() {
 void connectWLAN(const char* ssid, const char* password) {
    const int maxAttempts = 30;
    int nAttempts = 0;
-     
+
    Serial.println("Connecting to WLAN ...");
    //WiFi.mode(WIFI_STA);  //ESP8266
    WiFi.begin(ssid, password);
@@ -439,7 +443,7 @@ void connectWLAN(const char* ssid, const char* password) {
      Serial.print(".");
      nAttempts++;
    }
-   
+
    Serial.println();
    if (WiFi.status() == WL_CONNECTED ) {
      // Connection successful
@@ -451,7 +455,7 @@ void connectWLAN(const char* ssid, const char* password) {
      Serial.println("Could not connect to WIFI AP. Disconnecting.");
      WiFi.disconnect();
    }
-   
+
 }
 
 
@@ -600,7 +604,7 @@ void pulseTestPin() {
   digitalWrite(TEST_PIN_D, HIGH);
   delayMicroseconds(1);
   digitalWrite(TEST_PIN_D, LOW);
-   
+
 }
 
 
