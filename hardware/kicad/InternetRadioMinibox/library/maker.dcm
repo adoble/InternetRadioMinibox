@@ -11,6 +11,11 @@ D Adafruit Feather M0 WiFi - ATSAMD21 + ATWINC1500
 F https://www.adafruit.com/product/3010
 $ENDCMP
 #
+$CMP Adafruit-Feather-MusicMaker/Amp
+D Adafruit Feather MusicMaker with Amp
+F https://www.adafruit.com/product/3357
+$ENDCMP
+#
 $CMP ESP8266
 D IN-CIRCUIT ESP8266 BOARD
 F http://wiki.in-circuit.de/images/e/eb/610000292A_handout.pdf
