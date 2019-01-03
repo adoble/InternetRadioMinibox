@@ -31,6 +31,10 @@
 
 #include <SPI.h>
 
+// The vendor patches for the VS1053. These need to be
+// loaded to use the mono downmix functionality
+#include <vs1053b-patches.h>
+
 #ifdef __SAM3X8E__
 typedef volatile RwReg PortReg;
 typedef uint32_t PortMask;
@@ -141,6 +145,8 @@ class Lemon_VS1053 {
   void GPIO_pinMode(uint8_t i, uint8_t dir);
   // DOBLE 21.08.2016
   void setMP3Mode(void);
+  // DOBLE 03.01.2019
+  void setMono(void);
 
 
   //uint8_t mp3buffer[VS1053_DATABUFFERLEN];

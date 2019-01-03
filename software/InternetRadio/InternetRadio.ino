@@ -122,10 +122,9 @@ const char* password = WIFI_PWD;
 
 // URL of radio staion to access. Uncomment what is wanted.
 // TODO replace this with code so that it can be configured by the user
-const int NUMBER_STATIONS = 10;
+const int NUMBER_STATIONS = 12;
 //String station= "http://rpr1.fmstreams.de/stream1";   // RPR1   64kps  OBSOLEATE
 String stations[NUMBER_STATIONS] = {
-  //"http://217.151.151.90:80/rpr-80er-128-mp3", // RPR1 Best of the 80s - 128kbs
   "http://streams.rpr1.de/rpr-kaiserslautern-128-mp3",
   "http://streams.rpr1.de/rpr-80er-128-mp3", // RPR1 Best of the 80s - 128kbs
   "http://swr-swr3-live.cast.addradio.de/swr/swr3/live/mp3/128/stream.mp3", // SWR3 - 128kps
@@ -135,7 +134,9 @@ String stations[NUMBER_STATIONS] = {
   "http://mp3channels.webradio.antenne.de/antenne",   // Antenne
   "http://chai5she.cdn.dvmr.fr:80/fip-webradio1.mp3",  // FIP autour du rock
   "http://wdr-wdr3-live.icecast.wdr.de/wdr/wdr3/live/mp3/128/stream.mp3",  // WDR 3
-  "http://185.52.127.157/de/33001/mp3_128.mp3"  // NRJ Berlin
+  "http://185.52.127.157/de/33001/mp3_128.mp3",  // NRJ Berlin
+  "http://www.testsounds.com/track24.mp3", // Sweep left, 20 - 20.000 Hz -10 dB (677 KB)
+  "http://www.testsounds.com/track26.mp3" // Sweep right, 20 - 20.000 Hz -10 dB (677 KB)
   };
 
   //NOTE for RPR1 Stations see http://streams.rpr1.de/
@@ -240,20 +241,26 @@ void setup() {
   }
 
 
-  // player.begin();
+   player.begin();   //!!!!!
 
 
   // Make sure the VS1053 is in MP3 mode.
   // For some MP3 decoder boards this is not the case.
-  while (!player.readyForData()) {}
-  player.setMP3Mode();
-  Serial.println("MP3 Mode set.");
+//  while (!player.readyForData()) {}
+//  player.setMP3Mode();
+//  Serial.println("MP3 Mode set.");
+
+  
 
   // Set the initial volume by reading from the front panel controller
   while (!player.readyForData()) { }
-  Serial.println("Volume setting to 60");
-  player.setVolume(40,40);  // Higher is quieter.
+  Serial.println("Volume setting to 10");
+  player.setVolume(10,10);  // Higher is quieter.
   //adjustVolume();   //TODO provide a way for the FP controller to say that data is ready and that can work when it is disconnected
+
+  // Set the VS1053 into mono downmix mode (i.e. left and right channels are 
+  // mixed into one - mono - channel).
+  player.setMono(); 
 
   // Setup the interrupt for changes to the controls
   attachInterrupt(digitalPinToInterrupt(FP_CHANGE_INTR), changeISR, FALLING);
@@ -389,7 +396,8 @@ void loop() {
   }
 
   // Read the front panel controller to ascertain the state of the controls.
-  if (bufferInitialized && checkControlStatus == 1) {
+  //if (bufferInitialized && checkControlStatus == 1) {
+  if (false) {
     checkControlStatus = 0;
 
     //player.setTone(toneControl);  // TODO experiment with the best tone setting and place in setup()
@@ -404,7 +412,7 @@ void loop() {
     //}
 
     //adjustVolume();   // DOES NOT WORK!but used to
-    player.setVolume(50,50);
+    player.setVolume(20,20);
 
 
   }
@@ -531,7 +539,10 @@ void handleOtherCode(int httpCode) {
  */
 String getStationURL()
 {
-   return stations[1];  // RPR1
+   return stations[1];   // RPR1 80s
+   //return stations[10];    // Sweep left, 20 - 20.000 Hz -10 dB (677 KB)
+   //return  stations[11]; // Sweep right, 20 - 20.000 Hz -10 dB (677 KB)
+ 
 
 }
 
@@ -611,20 +622,4 @@ String getPathFromURL(String url) {
 
 }
 
-// Set the VS1053 chip into MP3 mode
-//void set_mp3_mode()
-//{
-//
-//   while (!player.readyForData());
-//
-//   player.sciWrite(VS1053_REG_WRAMADDR, 0xc017);
-//   player.sciWrite(VS1053_REG_WRAM, 0x0003);
-//
-//   player.sciWrite(VS1053_REG_WRAMADDR, 0xc019);
-//   player.sciWrite(VS1053_REG_WRAM, 0x0000);
-//   delay(100);
-//   player.softReset();
-//
-//   delay(100);
-//
-//}
+

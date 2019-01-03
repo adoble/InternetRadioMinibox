@@ -218,6 +218,9 @@ void Lemon_VS1053::reset() {
 
   sciWrite(VS1053_REG_CLOCKF, 0x6000);
 
+  // Load the patches as defined in vs1053b-patches.h
+  applyPatch(plugin, PLUGIN_SIZE);
+
   setVolume(40, 40);  // Default volume
 
 }
@@ -472,4 +475,9 @@ void Lemon_VS1053::sineTest(uint8_t n, uint16_t ms) {
   #ifdef SPI_HAS_TRANSACTION
   if (useHardwareSPI) spi->endTransaction();
   #endif
+}
+
+void Lemon_VS1053::setMono(void) {
+  sciWrite(VS1053_REG_WRAMADDR, 0x1e09);
+  sciWrite(VS1053_REG_WRAM, 0x0001);
 }
