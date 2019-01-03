@@ -28,8 +28,8 @@ void setup() {
 uint8_t i=0;
 void loop() {
   Serial.println(i);
-  //mySPI.beginTransaction(SPISettings(8000000, MSBFIRST, SPI_MODE0));
-  mySPI.beginTransaction(SPISettings(16000000, MSBFIRST, SPI_MODE0));
+  mySPI.beginTransaction(SPISettings(8000000, MSBFIRST, SPI_MODE0));
+ // mySPI.beginTransaction(SPISettings(16000000, MSBFIRST, SPI_MODE0));
   //mySPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE0));
   //mySPI.transfer(i++);
   mySPI.transfer(B01010101);

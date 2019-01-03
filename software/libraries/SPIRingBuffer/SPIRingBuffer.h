@@ -27,8 +27,10 @@
 // SRAM byte mode
 #define BYTE_MODE (0x00 | HOLD_DISABLE)
 
- // Clock speed 16 MHz
-#define RAMCLK 16000000
+ // Clock speed 6.0 MHz. The maximum rating for this chipSelect
+ // is 20MHZ
+ // TODO have this user defined
+#define RAMCLK 6000000
 
  // SPI setting for the RAM chip
  #define RAM_SPI_SETTING SPISettings(RAMCLK,  MSBFIRST, SPI_MODE0)

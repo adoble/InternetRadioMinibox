@@ -5,7 +5,7 @@
 *    - connects (WPA encryption) to an internet radio site using a
 *      Adafruit Feather M0 WiFi with ATWINC1500 (processor ARM Cortex M0+)
 *      with Arduino bootloader
-*    - reads the mp3 data stream
+*    - reads the MP3 data stream
 *    - buffers the data in internal RAM
 *    - transfers it to the VS1053 so that it can decode the mp3 data into
 *      an audio signal.
@@ -24,7 +24,7 @@
 *
 * Created Libaries (for the project)
 * ==================================
-* StreamingBuffer   - A ring buffer that uses the internal RAM.
+* SPIRingBuffer     - A ring buffer that uses an external SPI RAM (25K256).
 *                     This is used to buffer the data to that sproadic gaps in the internet connection
 *                     are "smoothed out".
 * Lemon_VS1053      - A local library to control the VS1053
@@ -36,13 +36,14 @@
 #include <WiFi101.h>
 #include <ArduinoHttpClient.h>
 #include <SPI.h>
-#include "wiring_private.h" // pinPeripheral() function
+#include "wiring_private.h" // Contains the pinPeripheral() function
 #include "Lemon_VS1053.h"
-#include "StreamingBuffer.h"
+//#include "StreamingBuffer.h"
+#include "SPIRingBuffer.h"
 
 #include "credentials.h"
 
-const char programName[] = "M0_VERSION ";
+const char programName[] = "M0 + MUSICMAKER VERSION ";
 
 /*---------------  PIN SETUP ---------------------*/
 // Pin setup for the VS1053
@@ -50,9 +51,10 @@ const int DREQ = A3;  // Used as digital pin
 const int XRST = A1;  // Used as digital pin
 const int XDCS = A2;  // Used as digital pin
 const int XCS = 6;
+const int SDCS = 10;
 
 // Pin setup for the RAM (ring buffer)
-//const int RAMCS = A4;  // Used as digital pin
+const int RAMCS = A4;  // Used as digital pin
 
 // Pin setup for the front panel controller
 const int FPCS = A5;  // Used as digital pin
@@ -61,8 +63,8 @@ const int FPCS = A5;  // Used as digital pin
 const int FP_CHANGE_INTR= 5;
 
 // Test pins
-const int TEST_PIN_D = 10;
-const int TEST_PIN_A = A0;
+const int TEST_PIN = A0;
+
 
 // Front panel controller instruction codes
 // TODO move these into a header file
@@ -87,10 +89,14 @@ const byte CHANGED_STATION_BIT = 1;     // A new station has been selected
 SPIClass spi(&sercom1, 12, 13, 11, SPI_PAD_0_SCK_1, SERCOM_RX_PAD_3);
 
 // Set up the internal RAM as a ring buffer
-const int STREAMING_BUFFER_SIZE = 20000; // NEED TO INCREASE
-uint8_t streamingBufferStorage[STREAMING_BUFFER_SIZE];
+const int STREAMING_BUFFER_SIZE = 32768; // NEED TO INCREASE
+//uint8_t streamingBufferStorage[STREAMING_BUFFER_SIZE];
+//StreamingBuffer streamingBuffer(streamingBufferStorage, STREAMING_BUFFER_SIZE);
 
-StreamingBuffer streamingBuffer(streamingBufferStorage, STREAMING_BUFFER_SIZE);
+// Set up the SPI RAM as a ring buffer 
+SPIRingBuffer streamingBuffer  = SPIRingBuffer(&spi, RAMCS);
+
+
 // Flag to ensure that the ring buffer is fully loaded on startup
 bool bufferInitialized = false;
 // The threshold at which the buffer will be loaded at a faster rate (i.e. to catch up).
@@ -121,7 +127,7 @@ const int NUMBER_STATIONS = 10;
 String stations[NUMBER_STATIONS] = {
   //"http://217.151.151.90:80/rpr-80er-128-mp3", // RPR1 Best of the 80s - 128kbs
   "http://streams.rpr1.de/rpr-kaiserslautern-128-mp3",
-  "http://streams.rp1.de/rpr-80er-128-mp3", // RPR1 Best of the 80s - 128kbs
+  "http://streams.rpr1.de/rpr-80er-128-mp3", // RPR1 Best of the 80s - 128kbs
   "http://swr-swr3-live.cast.addradio.de/swr/swr3/live/mp3/128/stream.mp3", // SWR3 - 128kps
   "http://bbcmedia.ic.llnwd.net/stream/bbcmedia_radio1_mf_p?s=1484901640&e=1484916040&h=0f66aa9663a84ce5183be725ec127cad",  // BBC1
   "http://bbcmedia.ic.llnwd.net/stream/bbcmedia_radio2_mf_p?s=1484901608&e=1484916008&h=1c6ffbe262747262e4c6267fd2f54bc1",  // BBC2
@@ -190,11 +196,9 @@ void setup() {
   Serial.println(programName);
   Serial.println();
 
-  // Set up the test pins
-  pinMode(TEST_PIN_D, OUTPUT);
-  digitalWrite(TEST_PIN_D, LOW);
-  pinMode(TEST_PIN_A, OUTPUT);
-  analogWrite(TEST_PIN_A, 0);
+  // Set up the test pin
+  // pinMode(TEST_PIN, OUTPUT);  // On the M0 DO NOT SET TO OUTPUT!
+  analogWrite(TEST_PIN, 0);
 
   // Before initialising using the libraries make sure that the CS pins are
   // in the right state
@@ -202,8 +206,11 @@ void setup() {
   digitalWrite(XCS, HIGH);
   pinMode(XDCS, OUTPUT);
   digitalWrite(XDCS, HIGH);
-  //pinMode(RAMCS, OUTPUT);
-  //digitalWrite(RAMCS, HIGH);
+  pinMode(SDCS, OUTPUT);
+  digitalWrite(SDCS, HIGH);
+  
+  pinMode(RAMCS, OUTPUT);
+  digitalWrite(RAMCS, HIGH);
 
 
   // Assign pins 11, 12, 13 to SERCOM functionality
@@ -228,15 +235,12 @@ void setup() {
   while ( !player.begin() && nTries < 20) { // initialise the player
     delay(1000);
     Serial.println("Error in player init!");
-       digitalWrite(TEST_PIN_D, HIGH);
-     player.dumpRegs();
-     nTries++;
-
-
+    player.dumpRegs();
+    nTries++;
   }
 
 
- // player.begin();
+  // player.begin();
 
 
   // Make sure the VS1053 is in MP3 mode.
@@ -248,46 +252,46 @@ void setup() {
   // Set the initial volume by reading from the front panel controller
   while (!player.readyForData()) { }
   Serial.println("Volume setting to 60");
-  player.setVolume(60,60);  // Higher is quieter.
+  player.setVolume(40,40);  // Higher is quieter.
   //adjustVolume();   //TODO provide a way for the FP controller to say that data is ready and that can work when it is disconnected
 
-    // Setup the interrupt for changes to the controls
-    attachInterrupt(digitalPinToInterrupt(FP_CHANGE_INTR), changeISR, FALLING);
+  // Setup the interrupt for changes to the controls
+  attachInterrupt(digitalPinToInterrupt(FP_CHANGE_INTR), changeISR, FALLING);
 
-    // Connect to the WIFI access point
-    // TODO  need to refactor so that a connection can be
-    // reestablished after being lost
+  // Connect to the WIFI access point
+  // TODO  need to refactor so that a connection can be
+  // reestablished after being lost
 
-    // Set up the pins for the Adafruit SPI connection to the Wifi component
-    WiFi.setPins(8,7,4,2);
+  // Set up the pins for the Adafruit SPI connection to the Wifi component
+  WiFi.setPins(8,7,4,2);
 
-    Serial.print("Attempting to connect to WIFI AP ");
-    Serial.println(ssid);
+  Serial.print("Attempting to connect to WIFI AP ");
+  Serial.println(ssid);
 
-    connectWLAN(ssid, password);
+  connectWLAN(ssid, password);
 
 
-      // Get the station
-      currentStation =  getStationURL();
+    // Get the station
+    currentStation =  getStationURL();
 
-      Serial.print("[HTTP] begin connection to ");
-      Serial.print(currentStation);
-      Serial.println(" ...");
+    Serial.print("[HTTP] begin connection to ");
+    Serial.print(currentStation);
+    Serial.println(" ...");
 
-      String host = getHostFromURL(currentStation);
-      String path = getPathFromURL(currentStation);
+    String host = getHostFromURL(currentStation);
+    String path = getPathFromURL(currentStation);
 
-      Serial.print("Host:"); Serial.println(host);
-      Serial.print("Path:"); Serial.println(path);
+    Serial.print("Host:"); Serial.println(host);
+    Serial.print("Path:"); Serial.println(path);
 
-      // Configure server and url
-      HttpClient http = HttpClient(wifiClient, host);
+    // Configure server and url
+    HttpClient http = HttpClient(wifiClient, host);
 
-      Serial.print("[HTTP] GET...\n");
-      // start connection and send HTTP header
-      http.get(path);
+    Serial.print("[HTTP] GET...\n");
+    // start connection and send HTTP header
+    http.get(path);
 
-      int httpCode = http.responseStatusCode();
+    int httpCode = http.responseStatusCode();
       if(httpCode > 0) {
           // HTTP header has been sent and server response header has been handled
           Serial.print("[HTTP] GET... code: "); Serial.println(httpCode);
@@ -324,8 +328,13 @@ void loop() {
   int nRead = 0;
   int maxBytesToRead;
 
-  //TEST write the sife of the bufer to the analog pin
-  //analogWrite(TEST_PIN_A,  (streamingBuffer.availableData() / STREAMING_BUFFER_SIZE)*255);
+  //TEST write the size of the buffer to the analog pin
+   //analogWrite(TEST_PIN,  (streamingBuffer.availableData() * 255)/ STREAMING_BUFFER_SIZE);
+//  Serial.print(streamingBuffer.availableData());
+//  Serial.print("    ");
+//  Serial.println( (streamingBuffer.availableData() * 255)/ STREAMING_BUFFER_SIZE);
+  
+  //Serial.println((streamingBuffer.availableData() / STREAMING_BUFFER_SIZE)*255);
   //Serial.print("B DATA: "); Serial.println(streamingBuffer.availableData());
 
   if (!bufferInitialized) {
@@ -343,7 +352,7 @@ void loop() {
 
       if (streamingBuffer.availableSpace() < DATABUFFERLEN) maxBytesToRead = streamingBuffer.availableSpace();
       else maxBytesToRead = (nBytes> DATABUFFERLEN ? DATABUFFERLEN : nBytes);
-      nRead = wifiClient.read(mp3Buffer, maxBytesToRead);   // Assuming that this exists (undocumented) in the WiFI101 library
+      nRead = wifiClient.read(mp3Buffer, maxBytesToRead);   
       // Transfer to buffer
       for (int i = 0; i < nRead; i++) {
         streamingBuffer.put(mp3Buffer[i]);
@@ -387,15 +396,15 @@ void loop() {
 
     unsigned int changes = getChanges();
     //Serial.println(changes, BIN) ;
-    if (changes &  (1 << CHANGED_VOL_BIT)) {
-      adjustVolume();
-    }
-    if (changes &  (1 << CHANGED_STATION_BIT)) {
+    //if (changes &  (1 << CHANGED_VOL_BIT)) {
+    //  adjustVolume();
+    //}
+    //if (changes &  (1 << CHANGED_STATION_BIT)) {
       // TODO Change station.
-    }
+    //}
 
     //adjustVolume();   // DOES NOT WORK!but used to
-    // player.setVolume(50,50);
+    player.setVolume(50,50);
 
 
   }
@@ -414,11 +423,13 @@ void loop() {
   if (bufferInitialized  && !skip) {
       // Transfer to VS1053
       if (player.readyForData()) {
+        analogWrite(TEST_PIN, 255);
         nRead = (streamingBuffer.availableData() > DATABUFFERLEN ? DATABUFFERLEN : streamingBuffer.availableData());
         for (int i= 0; i < nRead; i++) {
           mp3Buffer[i] = streamingBuffer.get();
         }
         player.playData(mp3Buffer, nRead);
+        analogWrite(TEST_PIN, 0);
       }
 
   }
@@ -520,7 +531,7 @@ void handleOtherCode(int httpCode) {
  */
 String getStationURL()
 {
-   return stations[0];  // RPR1
+   return stations[1];  // RPR1
 
 }
 
@@ -599,15 +610,6 @@ String getPathFromURL(String url) {
   return url.substring(startPos);
 
 }
-
-void pulseTestPin() {
-  digitalWrite(TEST_PIN_D, HIGH);
-  delayMicroseconds(1);
-  digitalWrite(TEST_PIN_D, LOW);
-
-}
-
-
 
 // Set the VS1053 chip into MP3 mode
 //void set_mp3_mode()

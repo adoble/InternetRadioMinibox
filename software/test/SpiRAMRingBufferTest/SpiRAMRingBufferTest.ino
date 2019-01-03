@@ -198,7 +198,7 @@ void loop() {
     data = i % 256;
     msg.concat(" this data ");
     msg.concat(data);
-    //Serial.println(msg);
+    Serial.println(msg);
     isNotEqual(msg, ringBuffer.put(data), -1);
     
     i++;
@@ -321,8 +321,15 @@ void isEqual(String s, int32_t actual, int32_t expected)
     Serial.print(s);
     Serial.print(" expected ");
     Serial.print(expected);
+    Serial.print(" (0x");
+    Serial.print(expected, OCT);
+    Serial.print(")");
+    
     Serial.print(" but got ");
-    Serial.println(actual);
+    Serial.print(actual);
+    Serial.print(" (0x");
+    Serial.print(actual, OCT);
+    Serial.println(")");
   }
 
 }

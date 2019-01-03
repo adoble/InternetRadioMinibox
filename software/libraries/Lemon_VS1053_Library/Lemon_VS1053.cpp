@@ -202,9 +202,7 @@ void Lemon_VS1053::softReset(void) {
   delay(100);
 }
 
-void name(/* arguments */) {
-  /* code */
-} Lemon_VS1053::reset() {
+void Lemon_VS1053::reset() {
   // TODO: http://www.vlsi.fi/player_vs1011_1002_1003/modularplayer/vs10xx_8c.html#a3
   // hardware reset
   if (_reset >= 0) {
@@ -224,10 +222,6 @@ void name(/* arguments */) {
 
 }
 
-
-boolean loadUserCode(uint_16 userCode[]) {
-  // TODO
-}
 
 uint8_t Lemon_VS1053::begin(void) {
 
@@ -264,10 +258,6 @@ uint8_t Lemon_VS1053::begin(void) {
   //Serial.print("REG STATUS ");Serial.println(sciRead(VS1053_REG_STATUS));   // DEBUG
 
   return (sciRead(VS1053_REG_STATUS) >> 4) & 0x0F;
-}
-
-uint8_t Lemon_VS1053::begin(uint_16 userCode[], uint_16 userCodeSize) {
-  //TODO
 }
 
 // DOBLE 21.08.2016

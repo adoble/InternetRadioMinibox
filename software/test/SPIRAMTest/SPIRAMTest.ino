@@ -18,7 +18,7 @@ SPIClass *spi;
 
 //SPISettings spiSettings(16000000, MSBFIRST, SPI_MODE0);   // NOT OK
 // SPISettings spiSettings(8000000, MSBFIRST, SPI_MODE0);  // OK
- SPISettings spiSettings(100000, MSBFIRST, SPI_MODE0);  // OK
+ SPISettings spiSettings(150000, MSBFIRST, SPI_MODE0);  // OK
 
 
 // SPISettings spiSettings(1000000, MSBFIRST, SPI_MODE0);  //OK
@@ -38,12 +38,17 @@ const int RAM_CS = A4; // Chip select pin for RAM = A4
 const int FP_CONTROLLER_CS = A5; 
 const int XDCS = A2;
 const int XCS = 6;
+const int SD_CS = 10;
+
+const int maxNumberTestPasses = 3;
 
 int mode;
 int operationMode; 
 
-boolean testOK = true; 
-int testId = 0; 
+uint16_t addr=0;
+
+int failures = 0; 
+int testPasses = 1; 
 
 void setup() {
   while(!Serial);
@@ -57,7 +62,9 @@ void setup() {
   pinMode(FP_CONTROLLER_CS, OUTPUT); 
   pinMode(XDCS, OUTPUT); 
   pinMode(XCS, OUTPUT); 
+  pinMode(SD_CS, OUTPUT);
   digitalWrite(FP_CONTROLLER_CS, HIGH);
+  digitalWrite(SD_CS, HIGH);
 
    // Pulling the following high causes incorrect reads, don't know why  --->  FIXME
   digitalWrite(XDCS, HIGH); //!!!!!!!!
@@ -81,19 +88,29 @@ void setup() {
 
 }
 
-uint8_t addr=0;
 
 void loop() {
+  long randomNumber;
   //Serial.println(i);
-  //mySPI.beginTransaction(SPISettings(8000000, MSBFIRST, SPI_MODE0));
+  //spi->beginTransaction(SPISettings(8000000, MSBFIRST, SPI_MODE0));
   //spi.beginTransaction(SPISettings(16000000, MSBFIRST, SPI_MODE0));
-
+  spi->beginTransaction(SPISettings(1500000, MSBFIRST, SPI_MODE0));  // 1.5MHz, should be enough for 128Kbps MP3
+ 
 
   delayMicroseconds(50);
   //unsigned int address = B00001111;
   unsigned char  testVal = B1010100;
 
-  
+  if (addr==0) {
+    Serial.println();
+    Serial.print("Start test pass ");
+    Serial.println(testPasses);
+  }
+
+  //randomNumber = random(255);
+  // Use the last byte
+  //testVal = randomNumber & 0xFF;
+
   writeByte(addr, testVal);
 
   delayMicroseconds(10);
@@ -101,27 +118,51 @@ void loop() {
   unsigned char val = 0;
   val = readByte(addr);
 
-  if (val != testVal) testOK = false;
+  if (val != testVal) {
 
-  delay(3);
-  Serial.print(addr, 10);
-  Serial.print("   ");
-  Serial.print(testVal, BIN);
-  Serial.print(":");
-  Serial.print(val, BIN);
-  Serial.print(val==testVal? "     OK": "     NOT OK");
-  Serial.print(testOK?"":  "  Incorrect test was previously detected.");
-  Serial.println();
+    //delay(3);
+    Serial.print("FAIL at addr\t");
+    Serial.print(addr, 10);
+    Serial.print("\t");
+    Serial.print(addr, BIN);
+    Serial.print("\t");
+    Serial.print(testVal, BIN);
+    Serial.print(":");
+    Serial.print(val, BIN);
+    Serial.print(" (wrote:read) ");
+    //Serial.print(testOK?"":  "  Incorrect test was previously detected.");
+    Serial.println();
+    failures++;
+  }
 
   addr++;
-  if (addr >= 256*1024) addr = 0; 
+  //if (addr >= 256*1024) addr = 0; 
+  if (addr >= 32768) {
+    addr = 0;  
+    Serial.println(); 
+    Serial.print("Test pass #"); 
+    Serial.print(testPasses); 
+    Serial.print(" completed with "); 
+    Serial.print(failures);
+    Serial.println(" failures"); 
+    Serial.println(); 
+    failures = 0;
+    testPasses++; 
+    
+  }
 
+  if (testPasses > maxNumberTestPasses) {
+    Serial.println();
+    Serial.println("All tests finished!");
+    Serial.println();
+    exit(0);
+  }
   
 
     //mySPI.transfer(i++);
   //spi.transfer(B01010101);
   
-  //spi.endTransaction();
+  spi->endTransaction();
 }
 
 void initMem() {
@@ -144,6 +185,15 @@ void setMode(char mode)
   
 }
 
+void chipSelect(bool state)
+ {
+   if (state) {
+    digitalWrite(RAM_CS, LOW);
+   } else {
+    digitalWrite(RAM_CS, HIGH);
+   }
+ }
+
 void writeByte(unsigned int address, char data)
 {
 
@@ -151,7 +201,7 @@ void writeByte(unsigned int address, char data)
   //setMode(BYTE_MODE);
 
   // Write address, read data
-  spi->beginTransaction(spiSettings); // !!!! before chi select 
+  spi->beginTransaction(spiSettings); // !!!! before chip select 
   chipSelect(true);  
   spi->transfer(WRITE);
   spi->transfer((unsigned char)(address >> 8));
@@ -191,11 +241,4 @@ unsigned char readByte(unsigned int address)
   return res;
 }
 
-void  chipSelect(bool state)
- {
-   if (state) {
-    digitalWrite(RAM_CS, LOW);
-   } else {
-    digitalWrite(RAM_CS, HIGH);
-   }
- }
+

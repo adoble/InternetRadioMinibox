@@ -12,9 +12,19 @@
 const char programName[] = "SpiRAMRingBufferV6";
 
 // Pins
-const int CS = 15;
+const int CS = A4;
 
-SPIRingBuffer ringBuffer(CS); // Chip select pin = GPIO15
+// Set up the SPI on SERCOM1. Not using the standard SPI pins as these are
+// connected to the WLAN module and this SPI bus is very chatty. The following
+// assigns pins as follows:
+//     SCK on Digital 13
+//     MISO on Digital 12
+//     MOSI on Digital 11
+SPIClass spi(&sercom1, 12, 13, 11, SPI_PAD_0_SCK_1, SERCOM_RX_PAD_3);
+
+// SPIRingBuffer ringBuffer(&spi, CS); // Chip select pin = GPIO15
+SPIRingBuffer(SPIClass* configuredSPI, uint8_t chipSelectPin);
+
 
 
 // Function protoypes for testing
